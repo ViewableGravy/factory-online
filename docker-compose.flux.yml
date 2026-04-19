@@ -1,0 +1,16 @@
+services:
+  flux-web:
+    image: sirsjg/flux-mcp:latest
+    container_name: factory-online-flux-web
+    user: "0:0"
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      FLUX_DATA: /app/packages/data/flux.sqlite
+    volumes:
+      - flux-data:/app/packages/data
+    command: bun packages/server/dist/index.js
+
+volumes:
+  flux-data:

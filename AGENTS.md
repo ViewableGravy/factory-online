@@ -10,17 +10,36 @@ The long-term target for this workspace is a native C++ codebase. The nested `be
 
 ```text
 cpp/                    -> Native runtime and engine work should live here as the C++ codebase grows
-documentation/          -> Source of truth for rewrite architecture and native runtime direction
+documentation/          -> In-repo exports and pointers; canonical long-form knowledge now lives in the Obsidian vault
 better-ecs-reference/   -> Reference implementation and design source, not the default implementation target
 .github/skills/         -> Repo-local skills for agentic programming in this workspace
 ```
+
+## Obsidian vault
+
+- Canonical vault location on Windows: `C:\Users\lleyt\factory-vault`
+- Canonical vault location from WSL: `/mnt/c/Users/lleyt/factory-vault`
+- Use the WSL path for all agent operations on the vault. Obsidian should open the Windows path natively.
+- Treat the vault as the source of truth for repository knowledge, architecture notes, standards, ongoing investigation notes, and task coordination.
+- Put durable knowledge and actionable work directly into the vault instead of leaving it only in transient chat context.
+- File operations on `/mnt/c/` are slower than native Linux paths. That is acceptable for markdown knowledge work.
+
+## Vault task workflow
+
+- Use `todo/` inside the vault as the shared planning area.
+- Create area-board notes for major surfaces such as networking, assets, rendering, architecture, persistence, and tooling.
+- Area-board notes should act like simple kanban boards with sections such as Backlog, Ready, In Progress, Blocked, and Done.
+- Store detailed task notes under `todo/tasks/` and link them from the relevant area-board notes.
+- Each task should either capture durable repository knowledge or coordinate concrete work that still needs to happen.
+- When an in-repo document is superseded by vault content, leave a short pointer in the repository rather than maintaining two competing long-form sources.
 
 ## Working process
 
 - Start from the most local implementation surface or failing behavior.
 - Use targeted search before broad repo exploration.
 - Reuse or extend existing code before introducing new helpers or abstractions.
-- Treat `documentation/core.md` as the main architectural reference when native runtime decisions are unclear.
+- Treat the Obsidian vault as the main architectural and planning reference when native runtime decisions are unclear.
+- Create or update vault notes when work uncovers durable guidance, repository standards, or follow-up tasks.
 - Use sub-agents for broad investigation or repository search when that is cheaper than carrying the full context in the main thread.
 
 ## Reference repo policy
@@ -86,6 +105,7 @@ better-ecs-reference/   -> Reference implementation and design source, not the d
 ## Skill usage
 
 - Check `.github/skills/` before improvising repo-local conventions.
+- Use the Obsidian vault workflow skill when work involves documentation capture, task coordination, or knowledge-base updates.
 - Prefer the repo-local skill over generic habits when they conflict.
 
 ## Completion bar
