@@ -1,2 +1,4 @@
 /better-ecs-reference/
 /.flux/
+/cpp/build/
+/cpp/CMakeUserPresets.json

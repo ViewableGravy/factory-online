@@ -1,0 +1,28 @@
+{
+  "buildPresets": [
+    {
+      "configurePreset": "debug",
+      "name": "debug",
+      "targets": [
+        "factory_server"
+      ]
+    }
+  ],
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 22,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "binaryDir": "${sourceDir}/build/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      },
+      "displayName": "Debug",
+      "generator": "Unix Makefiles",
+      "name": "debug"
+    }
+  ],
+  "version": 3
+}
