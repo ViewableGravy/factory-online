@@ -4,12 +4,12 @@
 
 This file is the root guidance for agent behavior in this repository.
 
-The long-term target for this workspace is a native C++ codebase. The nested `better-ecs-reference/` repo is a useful architectural reference, but its TypeScript, Bun, React, and Nx-specific rules should not be treated as the default for work in this root repository unless a task explicitly targets that folder.
+The active implementation target for this workspace is Java under `java/`. The nested `better-ecs-reference/` repo remains a useful architectural reference, but its TypeScript, Bun, React, and Nx-specific rules should not be treated as the default for work in this root repository unless a task explicitly targets that folder.
 
 ## Workspace map
 
 ```text
-cpp/                    -> Native runtime and engine work should live here as the C++ codebase grows
+java/                   -> Active Java runtime/application work
 documentation/          -> In-repo exports and pointers; canonical long-form knowledge now lives in the Obsidian vault
 better-ecs-reference/   -> Reference implementation and design source, not the default implementation target
 .github/skills/         -> Repo-local skills for agentic programming in this workspace
@@ -38,7 +38,7 @@ better-ecs-reference/   -> Reference implementation and design source, not the d
 - Start from the most local implementation surface or failing behavior.
 - Use targeted search before broad repo exploration.
 - Reuse or extend existing code before introducing new helpers or abstractions.
-- Treat the Obsidian vault as the main architectural and planning reference when native runtime decisions are unclear.
+- Treat the Obsidian vault as the main architectural and planning reference when runtime decisions are unclear.
 - Create or update vault notes when work uncovers durable guidance, repository standards, or follow-up tasks.
 - Use sub-agents for broad investigation or repository search when that is cheaper than carrying the full context in the main thread.
 
@@ -48,13 +48,13 @@ better-ecs-reference/   -> Reference implementation and design source, not the d
 - Do not copy TypeScript, CSS, React, Bun, Vite, or Nx-specific conventions into the root repo unless the current task explicitly works inside that nested repo.
 - When a pattern is worth keeping, port the intent rather than the syntax.
 
-## Native architecture rules
+## Runtime architecture rules
 
 - Preserve the update-versus-render split.
 	- Update owns authoritative simulation and persistent state transitions.
 	- Render is observational and should not mutate world state.
 - Prefer explicit ownership boundaries.
-	- Use RAII and deterministic cleanup.
+	- Use deterministic cleanup.
 	- Avoid hidden global state and ambiguous lifetime sharing.
 - Prefer focused domain modules over one giant engine library.
 - Keep simulation deterministic where gameplay depends on it.
@@ -66,15 +66,12 @@ better-ecs-reference/   -> Reference implementation and design source, not the d
 	- No casual shared mutable state across threads.
 	- Prefer message passing, job inputs/outputs, or single-writer ownership.
 
-## C++ coding standards
+## Java coding standards
 
 - Prefer guard clauses over nested `else` trees.
 - Keep interfaces narrow and composable.
-- Prefer value types and stack ownership by default.
-- Use `std::unique_ptr` for exclusive heap ownership and `std::shared_ptr` only when shared lifetime is truly required.
-- Prefer `std::span`, references, and views when ownership should not transfer.
-- Avoid raw `new` and `delete` in application code.
-- Avoid hidden allocations in hot paths.
+- Prefer immutable values and explicit ownership boundaries by default.
+- Avoid unnecessary shared mutable state.
 - Keep comments that explain ownership, invariants, determinism constraints, or thread assumptions.
 - Remove dead code rather than keeping compatibility shims unless the task explicitly requires a migration layer.
 
@@ -86,21 +83,17 @@ better-ecs-reference/   -> Reference implementation and design source, not the d
 
 ## Tooling and verification
 
-- Prefer CMake with CMakePresets and Ninja.
-- Standard build flow from `documentation/core.md`:
-	- `cmake --preset debug`
-	- `cmake --build --preset debug`
-	- `ctest --preset debug`
+- Standard build flow from `java/`:
+	- `make build`
+	- `make run`
 - Use narrower validation first for touched code, then widen as needed.
-- When debugging memory or threading issues, prefer sanitizer-enabled builds if presets are available.
-- If formatting or static analysis is configured, use `clang-format` and `clang-tidy` on touched code.
+- If formatting or static analysis is configured, use the narrowest relevant Java tooling on touched code.
 
 ## File and module design
 
-- Prefer feature-oriented folders and libraries.
-- Keep headers focused and minimize transitive includes.
-- Separate interface from implementation when that meaningfully improves compile-time hygiene or API clarity.
-- If a module grows large, split by domain behavior instead of accumulating unrelated helpers in one file.
+- Prefer feature-oriented folders and packages.
+- Keep public APIs focused and minimize transitive dependencies.
+- Split modules by domain behavior instead of accumulating unrelated helpers in one file.
 
 ## Skill usage
 

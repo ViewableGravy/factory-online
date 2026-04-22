@@ -1,6 +1,6 @@
 ---
 name: engine-render-philosophy
-description: Philosophy and decision rules for authoritative update logic versus read-only rendering in the native runtime.
+description: Philosophy and decision rules for authoritative update logic versus read-only rendering in the Java runtime.
 ---
 
 # Engine Render Philosophy
@@ -11,7 +11,7 @@ Document the intended separation between simulation and rendering so authoritati
 
 ## When to use
 
-- Adding or refactoring engine, gameplay, or runtime systems.
+- Adding or refactoring runtime or gameplay systems.
 - Adding or refactoring renderer stages, frame extraction, or draw preparation.
 - Reviewing code that mixes simulation state with visual presentation.
 

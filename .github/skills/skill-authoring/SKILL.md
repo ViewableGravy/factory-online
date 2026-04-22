@@ -19,7 +19,7 @@ Use this skill whenever creating or updating any skill under `.github/skills`.
 4. Keep the skill self-contained.
    - Do not depend on unstated tribal knowledge.
 5. Keep examples aligned with the root repository's target stack.
-   - Prefer C++, CMake, testing, architecture, and debugging examples over TypeScript-specific ones unless the skill is explicitly scoped to the reference repo.
+   - Prefer Java, testing, architecture, and debugging examples over TypeScript-specific ones unless the skill is explicitly scoped to the reference repo.
 
 ## Quality bar
 

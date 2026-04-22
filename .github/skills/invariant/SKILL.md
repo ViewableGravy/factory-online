@@ -21,18 +21,18 @@ Use this skill whenever you need to assert that a value exists or that a precond
 
 ### Replace downstream defensive plumbing
 
-```cpp
-Entity* entity = world.find(entityId);
-assert(entity && "entity must exist after lookup ownership was established");
-entity->tick();
+```java
+Entity entity = world.find(entityId);
+assert entity != null : "entity must exist after lookup ownership was established";
+entity.tick();
 ```
 
 ### Guard when a zero-like value is valid
 
-```cpp
-const auto index = map.find(key);
-if (index == map.end()) {
-    throw std::runtime_error("Index missing for key");
+```java
+Integer index = map.get(key);
+if (index == null) {
+   throw new IllegalStateException("Index missing for key");
 }
 ```
 
@@ -40,4 +40,4 @@ if (index == map.end()) {
 
 - Assertions document ownership and expected program shape.
 - A required value should fail close to the boundary that required it.
-- Do not normalize impossible states into broad optional flows just to quiet the compiler.
+- Do not normalize impossible states into broad optional flows just to quiet the type system.

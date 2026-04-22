@@ -1,5 +1,9 @@
 # C++ Workspace Structure
 
+This directory is now a legacy native bootstrap/prototype.
+
+The active runnable implementation target for the workspace is the Java project under `../java/`. Use this directory only when a task explicitly targets the older native scaffold.
+
 This directory is organized around a few explicit rules from the native rewrite notes:
 
 - application entrypoints stay thin and compose reusable libraries,
