@@ -2,7 +2,8 @@ JAVA := java
 JAVAC := javac
 
 BUILD_DIR := build/classes
-SERVER_SRC_DIR := apps/server/src/main/java
+SRC_DIRS := apps libs
+JAVA_SOURCES := $(shell find $(SRC_DIRS) -path '*/src/main/java/*' -name '*.java')
 SERVER_MAIN := com.factoryonline.server.Main
 
 .PHONY: run build clean
@@ -12,7 +13,7 @@ run: build
 
 build:
 	@mkdir -p $(BUILD_DIR)
-	$(JAVAC) -d $(BUILD_DIR) $(shell find $(SERVER_SRC_DIR) -name '*.java')
+	$(JAVAC) -d $(BUILD_DIR) $(JAVA_SOURCES)
 
 clean:
 	rm -rf build

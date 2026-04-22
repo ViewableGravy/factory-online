@@ -7,18 +7,29 @@ The current runnable application matches the existing bootstrap behavior in this
 - prints `Hello, world!`,
 - prompts for console input,
 - echoes each entered line until standard input closes.
+- keeps networking as documented requirements only for now.
 
 ## Layout
 
 ```text
 java/
   apps/
+    client/
+      src/main/java/com/factoryonline/client/
     server/
       src/main/java/com/factoryonline/server/Main.java
+    tools/
+      terminal-client/
+      terminal-server/
+  libs/
+    foundation/
+    simulation-core/
   build/
   Makefile
   run-server.sh
 ```
+
+Networking is intentionally not implemented in code yet. The requirements and future layout are documented in the vault note referenced from [documentation/networking.md](/home/gravy/programming/games/factory-online/documentation/networking.md).
 
 ## Requirements
 

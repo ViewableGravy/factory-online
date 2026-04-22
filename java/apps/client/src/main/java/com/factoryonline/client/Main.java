@@ -1,14 +1,14 @@
-package com.factoryonline.server;
+package com.factoryonline.client;
 
 import java.io.IOException;
 
-import com.factoryonline.server.bootstrap.ServerApplication;
+import com.factoryonline.client.bootstrap.ClientApplication;
 
 public final class Main {
     private Main() {
     }
 
     public static void main(String[] args) throws IOException {
-        ServerApplication.run(args);
+        ClientApplication.run(args);
     }
 }
