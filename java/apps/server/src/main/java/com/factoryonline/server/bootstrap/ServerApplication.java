@@ -3,32 +3,47 @@ package com.factoryonline.server.bootstrap;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
-import com.factoryonline.simulation.NamedThreadFactory;
 
 public final class ServerApplication {
     private ServerApplication() {
     }
 
     public static void run(String[] args) throws IOException {
-        System.out.println("Factory Online server scaffold");
-        System.out.println("Networking is intentionally not implemented yet.");
-        System.out.print("Enter text and press Enter: ");
+        Ticker ticker = new Ticker();
+        BatchedSimulationRunner runner = new BatchedSimulationRunner(ticker);
 
-        NamedThreadFactory myThreadFactory = new NamedThreadFactory("SimulationThread");
-        ExecutorService executorService = Executors.newFixedThreadPool(3, myThreadFactory);
-        for (int i = 0; i < 5; i++) {
-            executorService.execute(() -> System.out.println(Thread.currentThread().getName()));
-        }
+        try {
+            runner.addSimulation(new Simulation("Simulation 1"));
+            runner.addSimulation(new Simulation("Simulation 2"));
+            runner.addSimulation(new Simulation("Simulation 3"));
+            runner.addSimulation(new Simulation("Simulation 4"));
+            runner.addSimulation(new Simulation("Simulation 5"));
+            runner.addSimulation(new Simulation("Simulation 6"));
+            runner.addSimulation(new Simulation("Simulation 7"));
+            runner.addSimulation(new Simulation("Simulation 8"));
+            runner.addSimulation(new Simulation("Simulation 9"));
+            runner.addSimulation(new Simulation("Simulation 10"));
+            runner.addSimulation(new Simulation("Simulation 11"));
+            runner.addSimulation(new Simulation("Simulation 12"));
+            runner.addSimulation(new Simulation("Simulation 13"));
+            runner.addSimulation(new Simulation("Simulation 14"));
+            runner.addSimulation(new Simulation("Simulation 15"));
+            runner.addSimulation(new Simulation("Simulation 16"));
+            runner.addSimulation(new Simulation("Simulation 17"));
+            runner.addSimulation(new Simulation("Simulation 18"));
+            runner.addSimulation(new Simulation("Simulation 19"));
 
-        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-        String userInput;
-        while ((userInput = reader.readLine()) != null) {
-            System.out.println("Server received: " + userInput);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
             System.out.print("Enter text and press Enter: ");
+            String userInput;
+            while ((userInput = reader.readLine()) != null) {
+                System.out.println("Server received: " + userInput);
+                int currentTick = ticker.tick();
+                runner.awaitCompletion(currentTick);
+                System.out.print("Enter text and press Enter: ");
+            }
+        } finally {
+            runner.close();
         }
-        executorService.shutdown();
     }
 }
