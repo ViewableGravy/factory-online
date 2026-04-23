@@ -3,6 +3,8 @@ package com.factoryonline.server.bootstrap;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.factoryonline.simulation.Simulation;
+
 final class SimulationBatch {
     private final List<Simulation> simulations = new ArrayList<>();
 

@@ -8,6 +8,7 @@ import java.util.concurrent.Phaser;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.factoryonline.simulation.NamedThreadFactory;
+import com.factoryonline.simulation.Simulation;
 
 public final class BatchedSimulationRunner {
     private static final int MAX_WORKERS = 4;
