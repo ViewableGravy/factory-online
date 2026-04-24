@@ -49,6 +49,16 @@ public final class SimulationState {
         return value;
     }
 
+    public synchronized boolean applyAugmentation(int valueDelta) {
+        int nextValue = value + valueDelta;
+        if (nextValue < MIN_VALUE || nextValue > MAX_VALUE) {
+            return false;
+        }
+
+        value = nextValue;
+        return true;
+    }
+
     public synchronized SimulationDirection getDirection() {
         return direction;
     }

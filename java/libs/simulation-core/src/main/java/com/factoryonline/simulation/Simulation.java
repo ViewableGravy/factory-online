@@ -45,6 +45,18 @@ public final class Simulation {
         return state.snapshot();
     }
 
+    public SimulationActionResult applyAction(SimulationAugmentation augmentation) {
+        Objects.requireNonNull(augmentation, "augmentation");
+
+        boolean wasApplied = state.applyAugmentation(augmentation.getValueDelta());
+        if (!wasApplied) {
+            return SimulationActionResult.error(
+                "augmentation would move simulation outside bounds for " + name);
+        }
+
+        return SimulationActionResult.success();
+    }
+
     private static String validateName(String name) {
         String validatedName = Objects.requireNonNull(name, "name");
 

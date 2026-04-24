@@ -1,5 +1,9 @@
 # AGENTS.md
 
+## Workflow
+- NEVER remove code comments unless the user explicitly mentions to
+- NEVER replace hard coded calls with loops unless explicitply asked to
+
 ## Purpose
 
 This file is the root guidance for agent behavior in this repository.

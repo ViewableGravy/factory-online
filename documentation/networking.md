@@ -13,3 +13,4 @@ Short summary:
 - Document requirements first, then implement the transport, protocol, and fault-injection pieces manually later.
 - When implementation starts, prefer one physical module like `java/libs/networking/` rather than splitting the code immediately across multiple networking modules.
 - Keep the Java package namespace explicit, even if the physical module path is simplified.
+- The current terminal-input authoritative tick flow is documented in the `Terminal Input To Authoritative Tick Flow` section of the vault note above.
