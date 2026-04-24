@@ -1,0 +1,11 @@
+{
+  "java.project.outputPath": "build/classes",
+  "java.project.sourcePaths": [
+    "apps/client/src/main/java",
+    "apps/server/src/main/java",
+    "apps/tools/terminal-client/src/main/java",
+    "apps/tools/terminal-server/src/main/java",
+    "libs/foundation/src/main/java",
+    "libs/simulation-core/src/main/java"
+  ]
+}

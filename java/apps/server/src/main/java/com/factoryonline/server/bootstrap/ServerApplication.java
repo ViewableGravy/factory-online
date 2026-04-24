@@ -3,18 +3,23 @@ package com.factoryonline.server.bootstrap;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.List;
 
 import com.factoryonline.simulation.Simulation;
 import com.factoryonline.simulation.SimulationRegistry;
-import com.factoryonline.simulation.SimulationSnapshot;
 
 public final class ServerApplication {
+    private static final int WORKER_COUNT = 4;
+    private static final int BUFFER_DELAY_TICKS = 5;
+
     private ServerApplication() {
     }
 
     public static void run(String[] args) throws IOException {
-        Ticker ticker = new Ticker();
-        BatchedSimulationRunner runner = new BatchedSimulationRunner(ticker);
+        Ticker primaryTicker = new Ticker();
+        Ticker bufferedTicker = new Ticker();
+        BatchedSimulationRunner primaryRunner = new BatchedSimulationRunner(primaryTicker, WORKER_COUNT);
+        BatchedSimulationRunner bufferedRunner = new BatchedSimulationRunner(bufferedTicker, WORKER_COUNT);
         SimulationRegistry simulationRegistry = new SimulationRegistry();
 
         try {
@@ -27,50 +32,36 @@ public final class ServerApplication {
             simulationRegistry.register(new Simulation("Simulation 7"));
             simulationRegistry.register(new Simulation("Simulation 8"));
 
-            for (Simulation simulation : simulationRegistry.all()) {
-                runner.addSimulation(simulation);
+            List<Simulation> originalSimulations = simulationRegistry.all();
+            for (Simulation simulation : originalSimulations) {
+                primaryRunner.addSimulation(simulation);
             }
 
-            /***** SNAPSHOT CLONE CHECK *****/
-            int firstTick = ticker.tick();
-            runner.awaitCompletion(firstTick);
-
-            Simulation originalSimulation = simulationRegistry.get("Simulation 1");
-            SimulationSnapshot originalSnapshot = originalSimulation.snapshot();
-            Simulation clonedSimulation = new Simulation("Simulation 1 Clone", originalSnapshot);
-
-            simulationRegistry.register(clonedSimulation);
-            runner.addSimulation(clonedSimulation);
-
-            for (int tick = 0; tick < 5; tick++) {
-                int comparisonTick = ticker.tick();
-                runner.awaitCompletion(comparisonTick);
-                
-                ensureSnapshotsMatch(originalSimulation.snapshot(), clonedSimulation.snapshot());
+            for (Simulation simulation : originalSimulations) {
+                bufferedRunner.addSimulation(new Simulation(simulation.getName() + " Buffered", simulation.snapshot()));
             }
-
-            System.out.println("Snapshot clone check passed: " + originalSimulation.getName());
-
-            /***** APPLICATION LOOP *****/
 
             BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
             System.out.print("Enter text and press Enter: ");
             String userInput;
+
             while ((userInput = reader.readLine()) != null) {
-                System.out.println("Server received: " + userInput);
-                int currentTick = ticker.tick();
-                runner.awaitCompletion(currentTick);
+                System.out.println("\nServer received: " + userInput);
+
+                int currentTick = primaryTicker.tick();
+                primaryRunner.awaitCompletion(currentTick);
+
+                // Only run buffered simulation after a delay to ensure that they run with a defined delay
+                if (currentTick > BUFFER_DELAY_TICKS) {
+                    int bufferedTick = bufferedTicker.tick();
+                    bufferedRunner.awaitCompletion(bufferedTick);
+                }
+
                 System.out.print("Enter text and press Enter: ");
             }
         } finally {
-            runner.close();
-        }
-    }
-
-    private static void ensureSnapshotsMatch(SimulationSnapshot expected, SimulationSnapshot actual) {
-        if (!expected.equals(actual)) {
-            throw new IllegalStateException(
-                "Simulation snapshots do not match: expected " + expected + ", actual " + actual);
+            bufferedRunner.close();
+            primaryRunner.close();
         }
     }
 }

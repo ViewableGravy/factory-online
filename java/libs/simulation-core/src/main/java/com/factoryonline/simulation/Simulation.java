@@ -3,6 +3,10 @@ package com.factoryonline.simulation;
 import java.util.Objects;
 
 public final class Simulation {
+    private static final String INDENT = "    ";
+    private static final String ANSI_CYAN = "\u001B[36m";
+    private static final String ANSI_RESET = "\u001B[0m";
+
     private final String name;
     private final SimulationState state;
 
@@ -29,9 +33,9 @@ public final class Simulation {
         try {
             Thread.sleep(5L);
             System.out.println(
-                "[name: " + name + "] ran on [tick: " + updateTick + "] [value: " + state.getValue()
-                    + "] [direction: " + state.getDirection() + "] in [thread: "
-                    + Thread.currentThread().getName() + "]");
+                INDENT + ANSI_CYAN + "[Thread]" + ANSI_RESET + " " + Thread.currentThread().getName()
+                    + " [name: " + name + "] ran on [tick: " + updateTick + "] [value: " + state.getValue()
+                    + "] [direction: " + state.getDirection() + "]");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }

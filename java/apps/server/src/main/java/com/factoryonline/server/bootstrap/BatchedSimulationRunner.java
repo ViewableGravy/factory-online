@@ -2,6 +2,7 @@ package com.factoryonline.server.bootstrap;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Phaser;
@@ -11,7 +12,7 @@ import com.factoryonline.simulation.NamedThreadFactory;
 import com.factoryonline.simulation.Simulation;
 
 public final class BatchedSimulationRunner {
-    private static final int MAX_WORKERS = 4;
+    private static final int DEFAULT_WORKER_COUNT = 4;
 
     private final Ticker ticker;
     private final List<SimulationBatch> batches;
@@ -20,11 +21,20 @@ public final class BatchedSimulationRunner {
     private final AtomicInteger nextBatchIndex = new AtomicInteger(0);
 
     public BatchedSimulationRunner(Ticker ticker) {
-        this.ticker = ticker;
+        this(ticker, DEFAULT_WORKER_COUNT);
+    }
+
+    public BatchedSimulationRunner(Ticker ticker, int workerCount) {
+        this.ticker = Objects.requireNonNull(ticker, "ticker");
+
+        if (workerCount <= 0) {
+            throw new IllegalArgumentException("workerCount must be positive");
+        }
+
         this.phaser = new Phaser(0);
-        this.batches = createBatches();
+        this.batches = createBatches(workerCount);
         this.executorService =
-            Executors.newFixedThreadPool(batches.size(), new NamedThreadFactory("SimulationThread"));
+            Executors.newFixedThreadPool(workerCount, new NamedThreadFactory("SimulationThread"));
 
         startWorkers();
     }
@@ -35,8 +45,9 @@ public final class BatchedSimulationRunner {
     }
 
     public void awaitCompletion(int tick) {
-        if (tick <= 0)
+        if (tick <= 0) {
             return;
+        }
 
         phaser.awaitAdvance(tick - 1);
     }
@@ -53,9 +64,9 @@ public final class BatchedSimulationRunner {
         }
     }
 
-    private List<SimulationBatch> createBatches() {
-        List<SimulationBatch> createdBatches = new ArrayList<>(MAX_WORKERS);
-        for (int batchIndex = 0; batchIndex < MAX_WORKERS; batchIndex++) {
+    private List<SimulationBatch> createBatches(int workerCount) {
+        List<SimulationBatch> createdBatches = new ArrayList<>(workerCount);
+        for (int batchIndex = 0; batchIndex < workerCount; batchIndex++) {
             createdBatches.add(new SimulationBatch());
         }
 

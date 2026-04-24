@@ -7,6 +7,9 @@ public final class Ticker {
     private final Object tickMonitor = new Object();
     private volatile boolean terminated;
 
+    public Ticker() {
+    }
+
     public int tick() {
         int currentTick;
 
