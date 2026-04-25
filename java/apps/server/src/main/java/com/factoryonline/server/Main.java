@@ -1,7 +1,6 @@
 package com.factoryonline.server;
 
 import java.io.IOException;
-import java.io.InputStreamReader;
 
 import com.factoryonline.client.bootstrap.ClientApplication;
 import com.factoryonline.foundation.ids.ClientId;
@@ -35,7 +34,7 @@ public final class Main {
         client.processIncomingMessages();
 
         try {
-            try (CustomBufferedReader reader = new CustomBufferedReader(new InputStreamReader(System.in))) {
+            try (CustomBufferedReader reader = new CustomBufferedReader(System.in)) {
                 System.out.print("Server input (Enter=tick, up/down=apply, exit=quit): ");
                 CustomUserInput userInput;
 
