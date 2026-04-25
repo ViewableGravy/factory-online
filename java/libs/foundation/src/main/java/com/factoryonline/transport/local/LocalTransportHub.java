@@ -10,7 +10,7 @@ import java.util.Objects;
 import com.factoryonline.foundation.ids.ClientId;
 
 public final class LocalTransportHub {
-    private final int initialStateDelayTicks;
+    private final int transportDelayTicks;
     private final Map<ClientId, ClientInbox> clientInboxes = new HashMap<>();
     private final List<ScheduledValue<JoinSimulationRequest>> scheduledJoinRequests = new ArrayList<>();
     private final List<ScheduledValue<SimulationInputRequest>> scheduledSimulationInputRequests = new ArrayList<>();
@@ -20,12 +20,12 @@ public final class LocalTransportHub {
         this(0);
     }
 
-    public LocalTransportHub(int initialStateDelayTicks) {
-        if (initialStateDelayTicks < 0) {
-            throw new IllegalArgumentException("initialStateDelayTicks must not be negative");
+    public LocalTransportHub(int transportDelayTicks) {
+        if (transportDelayTicks < 0) {
+            throw new IllegalArgumentException("transportDelayTicks must not be negative");
         }
 
-        this.initialStateDelayTicks = initialStateDelayTicks;
+        this.transportDelayTicks = transportDelayTicks;
     }
 
     public synchronized LocalServerTransport createServerTransport() {
@@ -47,7 +47,9 @@ public final class LocalTransportHub {
     }
 
     synchronized void sendJoinRequest(JoinSimulationRequest joinRequest) {
-        scheduledJoinRequests.add(new ScheduledValue<>(Objects.requireNonNull(joinRequest, "joinRequest"), currentTick));
+        scheduledJoinRequests.add(new ScheduledValue<>(
+            Objects.requireNonNull(joinRequest, "joinRequest"),
+            currentTick));
     }
 
     synchronized List<JoinSimulationRequest> drainJoinRequests() {
@@ -57,7 +59,7 @@ public final class LocalTransportHub {
     synchronized void sendSimulationInputRequest(SimulationInputRequest simulationInputRequest) {
         scheduledSimulationInputRequests.add(new ScheduledValue<>(
             Objects.requireNonNull(simulationInputRequest, "simulationInputRequest"),
-            currentTick));
+            currentTick + transportDelayTicks));
     }
 
     synchronized List<SimulationInputRequest> drainSimulationInputRequests() {
@@ -68,7 +70,7 @@ public final class LocalTransportHub {
         ClientInbox inbox = requireClientInbox(clientId);
         inbox.scheduledInitialStates.add(new ScheduledValue<>(
             Objects.requireNonNull(initialState, "initialState"),
-            currentTick + initialStateDelayTicks));
+            currentTick + transportDelayTicks));
     }
 
     synchronized List<InitialSimulationState> drainInitialStates(ClientId clientId) {
@@ -79,7 +81,7 @@ public final class LocalTransportHub {
         ClientInbox inbox = requireClientInbox(clientId);
         inbox.scheduledSimulationUpdates.add(new ScheduledValue<>(
             Objects.requireNonNull(simulationUpdate, "simulationUpdate"),
-            currentTick));
+            currentTick + transportDelayTicks));
     }
 
     synchronized List<SimulationUpdate> drainSimulationUpdates(ClientId clientId) {

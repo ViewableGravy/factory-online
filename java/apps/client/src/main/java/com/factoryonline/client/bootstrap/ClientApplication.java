@@ -20,6 +20,8 @@ import com.factoryonline.transport.local.LocalClientTransport;
 import com.factoryonline.transport.local.SimulationUpdate;
 
 public final class ClientApplication {
+    private static final int CLIENT_STARTUP_BUFFER_TICKS = 4;
+
     private final ClientId clientId;
     private final SimulationId requestedSimulationId;
     private final LocalClientTransport transport;
@@ -29,6 +31,7 @@ public final class ClientApplication {
     private Ticker ticker;
     private BatchedSimulationRunner runner;
     private int pendingSimulationTick = -1;
+    private int remainingStartupBufferTicks;
     private boolean joinRequested;
 
     public ClientApplication(ClientId clientId, SimulationId requestedSimulationId, LocalClientTransport transport) {
@@ -65,6 +68,11 @@ public final class ClientApplication {
 
     public void advanceTick() {
         if (ticker == null || runner == null) {
+            return;
+        }
+
+        if (remainingStartupBufferTicks > 0) {
+            remainingStartupBufferTicks -= 1;
             return;
         }
 
@@ -149,6 +157,7 @@ public final class ClientApplication {
         if (ticker == null || runner == null) {
             ticker = new Ticker(initialState.getTick());
             runner = new BatchedSimulationRunner(1, "client");
+            remainingStartupBufferTicks = Math.max(0, CLIENT_STARTUP_BUFFER_TICKS - 1);
         }
 
         Simulation bufferedSimulation = new Simulation(initialState.getSimulationId(), initialState.getSnapshot());
@@ -159,7 +168,8 @@ public final class ClientApplication {
         System.out.println(
             "Client " + clientId
                 + " attached " + bufferedSimulation.getId()
-                + " at buffered tick " + initialState.getTick());
+                + " at snapshot tick " + initialState.getTick()
+                + " with startup buffer " + CLIENT_STARTUP_BUFFER_TICKS);
     }
 
     private static SimulationAugmentation toAugmentation(CustomUserInput userInput) {

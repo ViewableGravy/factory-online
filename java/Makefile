@@ -6,7 +6,7 @@ SRC_DIRS := apps libs
 JAVA_SOURCES := $(shell find $(SRC_DIRS) -path '*/src/main/java/*' -name '*.java')
 SERVER_MAIN := com.factoryonline.server.Main
 
-.PHONY: run build clean
+.PHONY: run build clean verify-delay
 
 run: build
 	$(JAVA) -cp $(BUILD_DIR) $(SERVER_MAIN)
@@ -17,3 +17,6 @@ build:
 
 clean:
 	rm -rf build
+
+verify-delay: build
+	./scripts/verify-delay-regression.sh

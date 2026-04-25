@@ -11,7 +11,7 @@ import com.factoryonline.server.bootstrap.ServerApplication;
 import com.factoryonline.transport.local.LocalTransportHub;
 
 public final class Main {
-    private static final int INITIAL_SNAPSHOT_DELAY_TICKS = 5;
+    private static final int TRANSPORT_DELAY_TICKS = 2;
     private static final ClientId CLIENT_ID = new ClientId("client-1");
     private static final SimulationId SIMULATION_ID = new SimulationId("Simulation 1");
 
@@ -19,7 +19,7 @@ public final class Main {
     }
 
     public static void main(String[] args) throws IOException {
-        LocalTransportHub transport = new LocalTransportHub(INITIAL_SNAPSHOT_DELAY_TICKS);
+        LocalTransportHub transport = new LocalTransportHub(TRANSPORT_DELAY_TICKS);
         ClientApplication client = new ClientApplication(
             CLIENT_ID,
             SIMULATION_ID,
