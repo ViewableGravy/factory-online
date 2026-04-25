@@ -3,11 +3,20 @@ package com.factoryonline.server.bootstrap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class Ticker {
-    private final AtomicInteger tick = new AtomicInteger(0);
+    private final AtomicInteger tick;
     private final Object tickMonitor = new Object();
     private volatile boolean terminated;
 
     public Ticker() {
+        this(0);
+    }
+
+    public Ticker(int initialTick) {
+        if (initialTick < 0) {
+            throw new IllegalArgumentException("initialTick must not be negative");
+        }
+
+        this.tick = new AtomicInteger(initialTick);
     }
 
     public int tick() {

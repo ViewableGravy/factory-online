@@ -13,19 +13,28 @@ import com.factoryonline.simulation.Simulation;
 
 public final class BatchedSimulationRunner {
     private static final int DEFAULT_WORKER_COUNT = 4;
+    private static final String DEFAULT_RUNTIME_OWNER = "runtime";
 
     private final Ticker ticker;
     private final List<SimulationBatch> batches;
     private final Phaser phaser;
     private final ExecutorService executorService;
     private final AtomicInteger nextBatchIndex = new AtomicInteger(0);
+    private final int startingTick;
+    private final String runtimeOwner;
 
     public BatchedSimulationRunner(Ticker ticker) {
-        this(ticker, DEFAULT_WORKER_COUNT);
+        this(ticker, DEFAULT_WORKER_COUNT, DEFAULT_RUNTIME_OWNER);
     }
 
     public BatchedSimulationRunner(Ticker ticker, int workerCount) {
+        this(ticker, workerCount, DEFAULT_RUNTIME_OWNER);
+    }
+
+    public BatchedSimulationRunner(Ticker ticker, int workerCount, String runtimeOwner) {
         this.ticker = Objects.requireNonNull(ticker, "ticker");
+        this.startingTick = ticker.getTick();
+        this.runtimeOwner = validateNonBlank(runtimeOwner, "runtimeOwner");
 
         if (workerCount <= 0) {
             throw new IllegalArgumentException("workerCount must be positive");
@@ -34,7 +43,7 @@ public final class BatchedSimulationRunner {
         this.phaser = new Phaser(0);
         this.batches = createBatches(workerCount);
         this.executorService =
-            Executors.newFixedThreadPool(workerCount, new NamedThreadFactory("SimulationThread"));
+            Executors.newFixedThreadPool(workerCount, new NamedThreadFactory(runtimeOwner + "-SimulationThread"));
 
         startWorkers();
     }
@@ -45,11 +54,11 @@ public final class BatchedSimulationRunner {
     }
 
     public void awaitCompletion(int tick) {
-        if (tick <= 0) {
+        if (tick <= startingTick) {
             return;
         }
 
-        phaser.awaitAdvance(tick - 1);
+        phaser.awaitAdvance((tick - startingTick) - 1);
     }
 
     public void close() {
@@ -60,7 +69,7 @@ public final class BatchedSimulationRunner {
 
     private void startWorkers() {
         for (SimulationBatch batch : batches) {
-            executorService.submit(new SimulationAction(phaser, batch, ticker));
+            executorService.submit(new SimulationAction(phaser, batch, ticker, startingTick, runtimeOwner));
         }
     }
 
@@ -71,5 +80,14 @@ public final class BatchedSimulationRunner {
         }
 
         return createdBatches;
+    }
+
+    private static String validateNonBlank(String value, String label) {
+        String validatedValue = Objects.requireNonNull(value, label);
+        if (validatedValue.isBlank()) {
+            throw new IllegalArgumentException(label + " must not be blank");
+        }
+
+        return validatedValue;
     }
 }

@@ -4,29 +4,44 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
+import com.factoryonline.foundation.ids.ClientId;
+import com.factoryonline.foundation.ids.SimulationId;
 import com.factoryonline.simulation.SimulationAugmentation;
+import com.factoryonline.transport.local.LocalServerTransport;
 
 public final class Broadcaster {
-    private static final Map<String, List<SimulationClient>> subscribersBySimulation = new HashMap<>();
+    private final LocalServerTransport transport;
+    private final Map<SimulationId, List<ClientId>> subscribersBySimulation = new HashMap<>();
 
-    private Broadcaster() {
+    public Broadcaster(LocalServerTransport transport) {
+        this.transport = Objects.requireNonNull(transport, "transport");
     }
 
-    public static synchronized void subscribe(String simulationName, SimulationClient client) {
-        subscribersBySimulation
-            .computeIfAbsent(simulationName, ignored -> new ArrayList<>())
-            .add(client);
+    public void subscribe(SimulationId simulationId, ClientId clientId) {
+        SimulationId validatedSimulationId = Objects.requireNonNull(simulationId, "simulationId");
+        ClientId validatedClientId = Objects.requireNonNull(clientId, "clientId");
+
+        List<ClientId> subscribers = subscribersBySimulation
+            .computeIfAbsent(validatedSimulationId, ignored -> new ArrayList<>());
+        if (subscribers.contains(validatedClientId))
+            return;
+
+        subscribers.add(validatedClientId);
     }
 
-    public static synchronized void broadcast(String simulationName, SimulationAugmentation augmentation, int tick) {
-        List<SimulationClient> subscribers = subscribersBySimulation.get(simulationName);
+    public void broadcast(SimulationId simulationId, int tick, SimulationAugmentation augmentation) {
+        SimulationId validatedSimulationId = Objects.requireNonNull(simulationId, "simulationId");
+        Objects.requireNonNull(augmentation, "augmentation");
+
+        List<ClientId> subscribers = subscribersBySimulation.get(validatedSimulationId);
         if (subscribers == null) {
             return;
         }
 
-        for (SimulationClient client : List.copyOf(subscribers)) {
-            client.receiveBroadcast(simulationName, augmentation, tick);
+        for (ClientId clientId : List.copyOf(subscribers)) {
+            transport.sendSimulationUpdate(clientId, validatedSimulationId, augmentation, tick);
         }
     }
 }

@@ -2,48 +2,65 @@ package com.factoryonline.client.bootstrap;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
+import com.factoryonline.foundation.ids.ClientId;
+import com.factoryonline.foundation.ids.SimulationId;
 import com.factoryonline.server.bootstrap.BatchedSimulationRunner;
-import com.factoryonline.server.bootstrap.SimulationClient;
 import com.factoryonline.server.bootstrap.Ticker;
 import com.factoryonline.simulation.Simulation;
 import com.factoryonline.simulation.SimulationAugmentation;
 import com.factoryonline.simulation.SimulationRegistry;
+import com.factoryonline.transport.local.InitialSimulationState;
+import com.factoryonline.transport.local.LocalClientTransport;
+import com.factoryonline.transport.local.SimulationUpdate;
 
-public final class ClientApplication implements SimulationClient {
-    private final Ticker ticker;
-    private final BatchedSimulationRunner runner;
+public final class ClientApplication {
+    private final ClientId clientId;
+    private final SimulationId requestedSimulationId;
+    private final LocalClientTransport transport;
     private final SimulationRegistry simulationRegistry = new SimulationRegistry();
-    private final Map<String, Map<Integer, SimulationAugmentation>> queuedActionsBySimulation = new HashMap<>();
+    private final Map<SimulationId, Map<Integer, SimulationAugmentation>> queuedActionsBySimulation = new HashMap<>();
+    private final Set<SimulationId> attachedSimulationIds = new HashSet<>();
+    private Ticker ticker;
+    private BatchedSimulationRunner runner;
+    private boolean joinRequested;
 
-    public ClientApplication() {
-        this.ticker = new Ticker();
-        this.runner = new BatchedSimulationRunner(ticker, 1);
+    public ClientApplication(ClientId clientId, SimulationId requestedSimulationId, LocalClientTransport transport) {
+        this.clientId = Objects.requireNonNull(clientId, "clientId");
+        this.requestedSimulationId = Objects.requireNonNull(requestedSimulationId, "requestedSimulationId");
+        this.transport = Objects.requireNonNull(transport, "transport");
     }
 
     public void setup() {
+        if (joinRequested) {
+            return;
+        }
+
+        transport.requestJoin(requestedSimulationId);
+        joinRequested = true;
+        System.out.println("Client " + clientId + " requested join for " + requestedSimulationId);
     }
 
     public static void run(String[] args) throws IOException {
         System.out.println("Factory Online client scaffold");
-        System.out.println("ClientApplication is now primarily driven by ServerApplication for the in-process prototype.");
+        System.out.println("Use the shared transport harness to connect this client to a server endpoint.");
     }
 
-    public void attachSimulation(Simulation simulation) {
-        Simulation bufferedSimulation = new Simulation(simulation.getName(), simulation.snapshot());
-        simulationRegistry.register(bufferedSimulation);
-        runner.addSimulation(bufferedSimulation);
+    public void processIncomingMessages() {
+        receiveInitialStates();
+        receiveSimulationUpdates();
     }
 
-    @Override
-    public synchronized void receiveBroadcast(String simulationName, SimulationAugmentation augmentation, int tick) {
-        queuedActionsBySimulation
-            .computeIfAbsent(simulationName, ignored -> new HashMap<>())
-            .put(tick, augmentation);
-    }
+    public void tick() {
+        processIncomingMessages();
+        if (ticker == null || runner == null) {
+            return;
+        }
 
-    public void run() {
         int clientTick = ticker.getTick() + 1;
         applyQueuedActions(clientTick);
 
@@ -52,11 +69,17 @@ public final class ClientApplication implements SimulationClient {
     }
 
     public void cleanup() {
-        runner.close();
+        if (runner != null) {
+            runner.close();
+        }
     }
 
     private synchronized void applyQueuedActions(int tick) {
-        for (Map.Entry<String, Map<Integer, SimulationAugmentation>> entry : queuedActionsBySimulation.entrySet()) {
+        for (var entry : queuedActionsBySimulation.entrySet()) {
+            if (!attachedSimulationIds.contains(entry.getKey())) {
+                continue;
+            }
+
             SimulationAugmentation augmentation = entry.getValue().remove(tick);
             if (augmentation == null) {
                 continue;
@@ -65,5 +88,44 @@ public final class ClientApplication implements SimulationClient {
             Simulation simulation = simulationRegistry.get(entry.getKey());
             simulation.applyAction(augmentation);
         }
+    }
+
+    private void receiveInitialStates() {
+        for (InitialSimulationState initialState : transport.drainInitialStates()) {
+            attachSimulation(initialState);
+        }
+    }
+
+    private synchronized void receiveSimulationUpdates() {
+        for (SimulationUpdate simulationUpdate : transport.drainSimulationUpdates()) {
+            queuedActionsBySimulation
+                .computeIfAbsent(simulationUpdate.getSimulationId(), ignored -> new HashMap<>())
+                .put(simulationUpdate.getTick(), simulationUpdate.getAugmentation());
+            System.out.println(
+                "Client " + clientId
+                    + " queued update for tick " + simulationUpdate.getTick()
+                    + " on " + simulationUpdate.getSimulationId());
+        }
+    }
+
+    private void attachSimulation(InitialSimulationState initialState) {
+        if (attachedSimulationIds.contains(initialState.getSimulationId())) {
+            return;
+        }
+
+        if (ticker == null || runner == null) {
+            ticker = new Ticker(initialState.getTick());
+            runner = new BatchedSimulationRunner(ticker, 1, "client");
+        }
+
+        Simulation bufferedSimulation = new Simulation(initialState.getSimulationId(), initialState.getSnapshot());
+        simulationRegistry.register(bufferedSimulation);
+        attachedSimulationIds.add(initialState.getSimulationId());
+        runner.addSimulation(bufferedSimulation);
+
+        System.out.println(
+            "Client " + clientId
+                + " attached " + bufferedSimulation.getId()
+                + " at buffered tick " + initialState.getTick());
     }
 }

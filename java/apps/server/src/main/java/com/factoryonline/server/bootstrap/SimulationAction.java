@@ -6,18 +6,22 @@ public class SimulationAction implements Runnable {
     private final Phaser phaser;
     private final SimulationBatch batch;
     private final Ticker ticker;
+    private final int startingTick;
+    private final String runtimeOwner;
 
-    public SimulationAction(Phaser phaser, SimulationBatch batch, Ticker ticker) {
+    public SimulationAction(Phaser phaser, SimulationBatch batch, Ticker ticker, int startingTick, String runtimeOwner) {
         this.phaser = phaser;
         this.batch = batch;
         this.ticker = ticker;
+        this.startingTick = startingTick;
+        this.runtimeOwner = runtimeOwner;
 
         phaser.register();
     }
 
     @Override
     public void run() {
-        int lastObservedTick = 0;
+        int lastObservedTick = startingTick;
 
         while (true) {
             int currentTick;
@@ -44,7 +48,7 @@ public class SimulationAction implements Runnable {
 
     private void runSimulationStep(int currentTick) {
         System.out.println(
-            "Running batch of " + batch.size()
+            "[" + runtimeOwner + "] Running batch of " + batch.size()
                 + " simulations on tick " + currentTick
                 + " in " + Thread.currentThread().getName());
 

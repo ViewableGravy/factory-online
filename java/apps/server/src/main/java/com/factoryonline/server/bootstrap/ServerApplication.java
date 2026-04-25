@@ -1,51 +1,49 @@
 package com.factoryonline.server.bootstrap;
 
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
 
-import com.factoryonline.client.bootstrap.ClientApplication;
+import com.factoryonline.foundation.ids.ClientId;
+import com.factoryonline.foundation.ids.SimulationId;
 import com.factoryonline.simulation.Simulation;
 import com.factoryonline.simulation.SimulationActionResult;
 import com.factoryonline.simulation.SimulationAugmentation;
 import com.factoryonline.simulation.SimulationRegistry;
+import com.factoryonline.transport.local.JoinSimulationRequest;
+import com.factoryonline.transport.local.LocalServerTransport;
 
 public final class ServerApplication {
-    private ClientApplication client;
-    private Ticker ticker;
-    private BatchedSimulationRunner runner;
-    private SimulationRegistry registry;
+    private static final SimulationId PRIMARY_SIMULATION_ID = new SimulationId("Simulation 1");
 
-    public ServerApplication(ClientApplication client) {
+    private final LocalServerTransport transport;
+    private final Ticker ticker;
+    private final BatchedSimulationRunner runner;
+    private final SimulationRegistry registry;
+    private final Broadcaster broadcaster;
+    private final Map<ClientId, SimulationId> simulationIdsByClientId = new HashMap<>();
+
+    public ServerApplication(LocalServerTransport transport) {
+        this.transport = Objects.requireNonNull(transport, "transport");
+
         this.ticker = new Ticker();
-        this.runner = new BatchedSimulationRunner(ticker, 2);
+        this.runner = new BatchedSimulationRunner(ticker, 2, "server");
         this.registry = new SimulationRegistry();
-        this.client = client;
+        this.broadcaster = new Broadcaster(transport);
     }
 
     public void setup() {
-        registry.register(new Simulation("Simulation 1"));
-        registry.register(new Simulation("Simulation 2"));
-
-        List<Simulation> originalSimulations = registry.all();
-        for (Simulation simulation : originalSimulations) {
-            runner.addSimulation(simulation);
-        }
-
-        client.attachSimulation(registry.get("Simulation 1"));
-        Broadcaster.subscribe("Simulation 1", client);
-
-        // increment 5 ticks at beginning for testing buffered client
-        runner.awaitCompletion(ticker.tick());
-        runner.awaitCompletion(ticker.tick());
-        runner.awaitCompletion(ticker.tick());
-        runner.awaitCompletion(ticker.tick());
-        runner.awaitCompletion(ticker.tick());
+        registerSimulation(new Simulation(PRIMARY_SIMULATION_ID));
+        registerSimulation(new Simulation(new SimulationId("Simulation 2")));
     }
 
-    public void run(CustomUserInput userInput) {
+    public void tick(CustomUserInput userInput) {
+        handleJoinRequests();
+
         int targetTick = ticker.getTick() + 1;
 
         if (userInput.isIncrement() || userInput.isDecrement()) {
-            Simulation simulation = registry.get("Simulation 1");
+            Simulation simulation = registry.get(PRIMARY_SIMULATION_ID);
             SimulationAugmentation augmentation = userInput.isIncrement()
                 ? new SimulationAugmentation(1)
                 : new SimulationAugmentation(-1);
@@ -54,16 +52,52 @@ public final class ServerApplication {
             if (!result.isSuccess()) {
                 System.out.println("Server action rejected: " + result.getError());
             } else {
-                Broadcaster.broadcast(simulation.getName(), augmentation, targetTick);
-                System.out.println("Broadcasted action for tick " + targetTick + " on " + simulation.getName());
+                broadcaster.broadcast(PRIMARY_SIMULATION_ID, targetTick, augmentation);
+
+                System.out.println("Broadcasted action for tick " + targetTick + " on " + simulation.getId());
             }
         }
 
-        int currentTick = ticker.tick();
-        runner.awaitCompletion(currentTick);
+        advanceSimulationTick();
     }
 
     public void cleanup() {
         runner.close();
+    }
+
+    public void handleJoinRequests() {
+        for (JoinSimulationRequest joinRequest : transport.drainJoinRequests()) {
+            ClientId clientId = joinRequest.getClientId();
+            if (simulationIdsByClientId.containsKey(clientId)) {
+                System.out.println("Server ignored duplicate join from " + clientId);
+                continue;
+            }
+
+            SimulationId simulationId = joinRequest.getSimulationId();
+            Simulation simulation = registry.getOrNull(simulationId);
+            if (simulation == null) {
+                System.out.println("Server rejected join from " + clientId + ": " + simulationId + " not found");
+                continue;
+            }
+
+            simulationIdsByClientId.put(clientId, simulationId);
+            broadcaster.subscribe(simulationId, clientId);
+            transport.sendInitialState(clientId, simulationId, simulation.snapshot(), ticker.getTick());
+            
+            System.out.println(
+                "Server accepted join from " + clientId
+                    + " for " + simulationId
+                    + " at current server tick " + ticker.getTick());
+        }
+    }
+
+    private void registerSimulation(Simulation simulation) {
+        registry.register(simulation);
+        runner.addSimulation(simulation);
+    }
+
+    private void advanceSimulationTick() {
+        int currentTick = ticker.tick();
+        runner.awaitCompletion(currentTick);
     }
 }
