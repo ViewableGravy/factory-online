@@ -44,6 +44,8 @@ From `java/`:
 ./run-server.sh
 ```
 
+Pass `-v` to show the underlying build and run commands before the application starts.
+
 Or explicitly:
 
 ```bash

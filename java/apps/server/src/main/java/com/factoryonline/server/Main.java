@@ -19,36 +19,48 @@ public final class Main {
     }
 
     public static void main(String[] args) throws IOException {
-        LocalTransportHub transportHub = new LocalTransportHub(INITIAL_SNAPSHOT_DELAY_TICKS);
+        LocalTransportHub transport = new LocalTransportHub(INITIAL_SNAPSHOT_DELAY_TICKS);
         ClientApplication client = new ClientApplication(
             CLIENT_ID,
             SIMULATION_ID,
-            transportHub.createClientTransport(CLIENT_ID)
+            transport.createClientTransport(CLIENT_ID)
         );
-        ServerApplication server = new ServerApplication(transportHub.createServerTransport());
+        ServerApplication server = new ServerApplication(transport.createServerTransport());
 
         server.setup();
         client.setup();
-        
-        server.handleJoinRequests();
+
+        server.processIncomingMessages();
         client.processIncomingMessages();
 
         try {
             try (CustomBufferedReader reader = new CustomBufferedReader(System.in)) {
-                System.out.print("Server input (Enter=tick, up/down=apply, exit=quit): ");
+                System.out.print("Client input (Enter=tick, up/down=apply, exit=quit): ");
                 CustomUserInput userInput;
 
                 while ((userInput = reader.readLine()) != null) {
-                    System.out.println("\nServer received: " + userInput.getRaw());
+                    System.out.println("\nClient received: " + userInput.getRaw());
 
                     if (userInput.isExit())
                         break;
 
-                    server.tick(userInput);
-                    client.tick();
-                    transportHub.advanceTick();
+                    server.advanceTick();
+                    client.advanceTick();
 
-                    System.out.print("Server input (Enter=tick, up/down=apply, exit=quit): ");
+                    // This is tick aware so that we can mimic a network delay while ticks are manual
+                    // In the future, this will be a network layer that will not hold onto the packet
+                    // for a static amount of ticks, but instead be measured in MS
+                    transport.advanceTick();
+
+                    client.handleInput(userInput);
+
+                    server.processIncomingMessages();
+                    client.processIncomingMessages();
+
+                    server.simulateCurrentTick();
+                    client.simulateCurrentTick();
+
+                    System.out.print("Client input (Enter=tick, up/down=apply, exit=quit): ");
                 }
             }
         } finally {

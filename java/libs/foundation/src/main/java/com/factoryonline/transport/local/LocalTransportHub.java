@@ -13,6 +13,7 @@ public final class LocalTransportHub {
     private final int initialStateDelayTicks;
     private final Map<ClientId, ClientInbox> clientInboxes = new HashMap<>();
     private final List<ScheduledValue<JoinSimulationRequest>> scheduledJoinRequests = new ArrayList<>();
+    private final List<ScheduledValue<SimulationInputRequest>> scheduledSimulationInputRequests = new ArrayList<>();
     private int currentTick;
 
     public LocalTransportHub() {
@@ -41,12 +42,26 @@ public final class LocalTransportHub {
         currentTick += 1;
     }
 
+    public synchronized int getCurrentTick() {
+        return currentTick;
+    }
+
     synchronized void sendJoinRequest(JoinSimulationRequest joinRequest) {
         scheduledJoinRequests.add(new ScheduledValue<>(Objects.requireNonNull(joinRequest, "joinRequest"), currentTick));
     }
 
     synchronized List<JoinSimulationRequest> drainJoinRequests() {
         return drainReady(scheduledJoinRequests);
+    }
+
+    synchronized void sendSimulationInputRequest(SimulationInputRequest simulationInputRequest) {
+        scheduledSimulationInputRequests.add(new ScheduledValue<>(
+            Objects.requireNonNull(simulationInputRequest, "simulationInputRequest"),
+            currentTick));
+    }
+
+    synchronized List<SimulationInputRequest> drainSimulationInputRequests() {
+        return drainReady(scheduledSimulationInputRequests);
     }
 
     synchronized void sendInitialState(ClientId clientId, InitialSimulationState initialState) {

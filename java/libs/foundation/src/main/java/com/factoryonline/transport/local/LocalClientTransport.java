@@ -5,6 +5,7 @@ import java.util.Objects;
 
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
+import com.factoryonline.simulation.SimulationAugmentation;
 
 public final class LocalClientTransport {
     private final LocalTransportHub transportHub;
@@ -21,6 +22,14 @@ public final class LocalClientTransport {
 
     public void requestJoin(SimulationId simulationId) {
         transportHub.sendJoinRequest(new JoinSimulationRequest(clientId, simulationId));
+    }
+
+    public void sendSimulationInput(SimulationId simulationId, SimulationAugmentation augmentation) {
+        transportHub.sendSimulationInputRequest(new SimulationInputRequest(clientId, simulationId, augmentation));
+    }
+
+    public int getCurrentTick() {
+        return transportHub.getCurrentTick();
     }
 
     public List<InitialSimulationState> drainInitialStates() {

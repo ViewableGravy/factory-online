@@ -3,9 +3,10 @@ package com.factoryonline.server.bootstrap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Phaser;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.factoryonline.simulation.NamedThreadFactory;
@@ -15,37 +16,29 @@ public final class BatchedSimulationRunner {
     private static final int DEFAULT_WORKER_COUNT = 4;
     private static final String DEFAULT_RUNTIME_OWNER = "runtime";
 
-    private final Ticker ticker;
     private final List<SimulationBatch> batches;
-    private final Phaser phaser;
     private final ExecutorService executorService;
     private final AtomicInteger nextBatchIndex = new AtomicInteger(0);
-    private final int startingTick;
     private final String runtimeOwner;
 
-    public BatchedSimulationRunner(Ticker ticker) {
-        this(ticker, DEFAULT_WORKER_COUNT, DEFAULT_RUNTIME_OWNER);
+    public BatchedSimulationRunner() {
+        this(DEFAULT_WORKER_COUNT, DEFAULT_RUNTIME_OWNER);
     }
 
-    public BatchedSimulationRunner(Ticker ticker, int workerCount) {
-        this(ticker, workerCount, DEFAULT_RUNTIME_OWNER);
+    public BatchedSimulationRunner(int workerCount) {
+        this(workerCount, DEFAULT_RUNTIME_OWNER);
     }
 
-    public BatchedSimulationRunner(Ticker ticker, int workerCount, String runtimeOwner) {
-        this.ticker = Objects.requireNonNull(ticker, "ticker");
-        this.startingTick = ticker.getTick();
+    public BatchedSimulationRunner(int workerCount, String runtimeOwner) {
         this.runtimeOwner = validateNonBlank(runtimeOwner, "runtimeOwner");
 
         if (workerCount <= 0) {
             throw new IllegalArgumentException("workerCount must be positive");
         }
 
-        this.phaser = new Phaser(0);
         this.batches = createBatches(workerCount);
         this.executorService =
             Executors.newFixedThreadPool(workerCount, new NamedThreadFactory(runtimeOwner + "-SimulationThread"));
-
-        startWorkers();
     }
 
     public void addSimulation(Simulation simulation) {
@@ -53,24 +46,30 @@ public final class BatchedSimulationRunner {
         batches.get(batchIndex).addSimulation(simulation);
     }
 
-    public void awaitCompletion(int tick) {
-        if (tick <= startingTick) {
-            return;
+    public void runTick(int tick) {
+        if (tick <= 0) {
+            throw new IllegalArgumentException("tick must be positive");
         }
 
-        phaser.awaitAdvance((tick - startingTick) - 1);
+        List<Future<?>> futures = new ArrayList<>(batches.size());
+        for (SimulationBatch batch : batches) {
+            futures.add(executorService.submit(new SimulationAction(batch, tick, runtimeOwner)));
+        }
+
+        for (var future : futures) {
+            try {
+                future.get();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            } catch (ExecutionException e) {
+                throw new IllegalStateException("Simulation batch failed for tick " + tick, e.getCause());
+            }
+        }
     }
 
     public void close() {
-        ticker.shutdown();
-        phaser.forceTermination();
         executorService.shutdownNow();
-    }
-
-    private void startWorkers() {
-        for (SimulationBatch batch : batches) {
-            executorService.submit(new SimulationAction(phaser, batch, ticker, startingTick, runtimeOwner));
-        }
     }
 
     private List<SimulationBatch> createBatches(int workerCount) {

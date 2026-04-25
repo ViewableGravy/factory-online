@@ -38,16 +38,6 @@ public final class Ticker {
         return tick.get();
     }
 
-    public int awaitTick(int previousTick) throws InterruptedException {
-        synchronized (tickMonitor) {
-            while (!terminated && tick.get() == previousTick) {
-                tickMonitor.wait();
-            }
-
-            return tick.get();
-        }
-    }
-
     public void shutdown() {
         terminated = true;
 

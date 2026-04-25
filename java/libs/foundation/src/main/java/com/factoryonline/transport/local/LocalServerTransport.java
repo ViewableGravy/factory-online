@@ -19,6 +19,10 @@ public final class LocalServerTransport {
         return transportHub.drainJoinRequests();
     }
 
+    public List<SimulationInputRequest> drainSimulationInputRequests() {
+        return transportHub.drainSimulationInputRequests();
+    }
+
     public void sendInitialState(ClientId clientId, SimulationId simulationId, SimulationSnapshot snapshot, int tick) {
         transportHub.sendInitialState(clientId, new InitialSimulationState(simulationId, snapshot, tick));
     }

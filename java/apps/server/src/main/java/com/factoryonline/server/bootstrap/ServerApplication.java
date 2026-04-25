@@ -8,10 +8,10 @@ import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
 import com.factoryonline.simulation.Simulation;
 import com.factoryonline.simulation.SimulationActionResult;
-import com.factoryonline.simulation.SimulationAugmentation;
 import com.factoryonline.simulation.SimulationRegistry;
 import com.factoryonline.transport.local.JoinSimulationRequest;
 import com.factoryonline.transport.local.LocalServerTransport;
+import com.factoryonline.transport.local.SimulationInputRequest;
 
 public final class ServerApplication {
     private static final SimulationId PRIMARY_SIMULATION_ID = new SimulationId("Simulation 1");
@@ -22,12 +22,13 @@ public final class ServerApplication {
     private final SimulationRegistry registry;
     private final Broadcaster broadcaster;
     private final Map<ClientId, SimulationId> simulationIdsByClientId = new HashMap<>();
+    private int pendingSimulationTick = -1;
 
     public ServerApplication(LocalServerTransport transport) {
         this.transport = Objects.requireNonNull(transport, "transport");
 
         this.ticker = new Ticker();
-        this.runner = new BatchedSimulationRunner(ticker, 2, "server");
+        this.runner = new BatchedSimulationRunner(2, "server");
         this.registry = new SimulationRegistry();
         this.broadcaster = new Broadcaster(transport);
     }
@@ -37,35 +38,30 @@ public final class ServerApplication {
         registerSimulation(new Simulation(new SimulationId("Simulation 2")));
     }
 
-    public void tick(CustomUserInput userInput) {
+    public void processIncomingMessages() {
         handleJoinRequests();
+        handleSimulationInputRequests();
+    }
 
-        int targetTick = ticker.getTick() + 1;
+    public void advanceTick() {
+        pendingSimulationTick = ticker.tick();
+    }
 
-        if (userInput.isIncrement() || userInput.isDecrement()) {
-            Simulation simulation = registry.get(PRIMARY_SIMULATION_ID);
-            SimulationAugmentation augmentation = userInput.isIncrement()
-                ? new SimulationAugmentation(1)
-                : new SimulationAugmentation(-1);
-
-            SimulationActionResult result = simulation.applyAction(augmentation);
-            if (!result.isSuccess()) {
-                System.out.println("Server action rejected: " + result.getError());
-            } else {
-                broadcaster.broadcast(PRIMARY_SIMULATION_ID, targetTick, augmentation);
-
-                System.out.println("Broadcasted action for tick " + targetTick + " on " + simulation.getId());
-            }
+    public void simulateCurrentTick() {
+        if (pendingSimulationTick <= 0) {
+            return;
         }
 
-        advanceSimulationTick();
+        runner.runTick(pendingSimulationTick);
+        pendingSimulationTick = -1;
     }
 
     public void cleanup() {
+        ticker.shutdown();
         runner.close();
     }
 
-    public void handleJoinRequests() {
+    private void handleJoinRequests() {
         for (JoinSimulationRequest joinRequest : transport.drainJoinRequests()) {
             ClientId clientId = joinRequest.getClientId();
             if (simulationIdsByClientId.containsKey(clientId)) {
@@ -91,13 +87,27 @@ public final class ServerApplication {
         }
     }
 
+    private void handleSimulationInputRequests() {
+        for (SimulationInputRequest inputRequest : transport.drainSimulationInputRequests()) {
+            Simulation simulation = registry.get(inputRequest.getSimulationId());
+            SimulationActionResult result = simulation.applyAction(inputRequest.getAugmentation());
+            if (!result.isSuccess()) {
+                System.out.println("Server action rejected: " + result.getError());
+                continue;
+            }
+
+            int targetTick = ticker.getTick();
+            broadcaster.broadcast(inputRequest.getSimulationId(), targetTick, inputRequest.getAugmentation());
+
+            System.out.println(
+                "Server applied input from " + inputRequest.getClientId()
+                    + " for tick " + targetTick
+                    + " on " + simulation.getId());
+        }
+    }
+
     private void registerSimulation(Simulation simulation) {
         registry.register(simulation);
         runner.addSimulation(simulation);
-    }
-
-    private void advanceSimulationTick() {
-        int currentTick = ticker.tick();
-        runner.awaitCompletion(currentTick);
     }
 }

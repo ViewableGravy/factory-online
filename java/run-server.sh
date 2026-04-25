@@ -4,4 +4,20 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
-make -C "$script_dir" run
+verbose=false
+
+if [[ "${1-}" == "-v" ]]; then
+	verbose=true
+	shift
+fi
+
+if [[ "$#" -gt 0 ]]; then
+	echo "usage: $0 [-v]" >&2
+	exit 1
+fi
+
+if [[ "$verbose" == true ]]; then
+	make -C "$script_dir" run
+else
+	make -s -C "$script_dir" run
+fi

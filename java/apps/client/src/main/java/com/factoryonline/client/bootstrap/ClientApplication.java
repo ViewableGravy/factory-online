@@ -10,6 +10,7 @@ import java.util.Set;
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
 import com.factoryonline.server.bootstrap.BatchedSimulationRunner;
+import com.factoryonline.server.bootstrap.CustomUserInput;
 import com.factoryonline.server.bootstrap.Ticker;
 import com.factoryonline.simulation.Simulation;
 import com.factoryonline.simulation.SimulationAugmentation;
@@ -27,6 +28,7 @@ public final class ClientApplication {
     private final Set<SimulationId> attachedSimulationIds = new HashSet<>();
     private Ticker ticker;
     private BatchedSimulationRunner runner;
+    private int pendingSimulationTick = -1;
     private boolean joinRequested;
 
     public ClientApplication(ClientId clientId, SimulationId requestedSimulationId, LocalClientTransport transport) {
@@ -57,18 +59,49 @@ public final class ClientApplication {
 
     public void tick() {
         processIncomingMessages();
+        advanceTick();
+        simulateCurrentTick();
+    }
+
+    public void advanceTick() {
         if (ticker == null || runner == null) {
             return;
         }
 
-        int clientTick = ticker.getTick() + 1;
-        applyQueuedActions(clientTick);
+        pendingSimulationTick = ticker.tick();
+    }
 
-        int completedTick = ticker.tick();
-        runner.awaitCompletion(completedTick);
+    public void handleInput(CustomUserInput userInput) {
+        Objects.requireNonNull(userInput, "userInput");
+
+        SimulationAugmentation augmentation = toAugmentation(userInput);
+        if (augmentation == null) {
+            return;
+        }
+
+        transport.sendSimulationInput(requestedSimulationId, augmentation);
+
+        System.out.println(
+            "Client " + clientId
+                + " sent input request for " + requestedSimulationId
+                + " on transport tick " + transport.getCurrentTick());
+    }
+
+    public void simulateCurrentTick() {
+        if (ticker == null || runner == null || pendingSimulationTick <= 0) {
+            return;
+        }
+
+        applyQueuedActions(pendingSimulationTick);
+        runner.runTick(pendingSimulationTick);
+        pendingSimulationTick = -1;
     }
 
     public void cleanup() {
+        if (ticker != null) {
+            ticker.shutdown();
+        }
+
         if (runner != null) {
             runner.close();
         }
@@ -115,7 +148,7 @@ public final class ClientApplication {
 
         if (ticker == null || runner == null) {
             ticker = new Ticker(initialState.getTick());
-            runner = new BatchedSimulationRunner(ticker, 1, "client");
+            runner = new BatchedSimulationRunner(1, "client");
         }
 
         Simulation bufferedSimulation = new Simulation(initialState.getSimulationId(), initialState.getSnapshot());
@@ -127,5 +160,17 @@ public final class ClientApplication {
             "Client " + clientId
                 + " attached " + bufferedSimulation.getId()
                 + " at buffered tick " + initialState.getTick());
+    }
+
+    private static SimulationAugmentation toAugmentation(CustomUserInput userInput) {
+        if (userInput.isIncrement()) {
+            return new SimulationAugmentation(1);
+        }
+
+        if (userInput.isDecrement()) {
+            return new SimulationAugmentation(-1);
+        }
+
+        return null;
     }
 }

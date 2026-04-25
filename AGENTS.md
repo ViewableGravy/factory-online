@@ -1,14 +1,20 @@
-# AGENTS.md
-
-## Workflow
+# Workflow
 - NEVER remove code comments unless the user explicitly mentions to
 - NEVER replace hard coded calls with loops unless explicitply asked to
 
-## Purpose
+# Agentic Workflow
+## Request to Completion workflow
+1. Use AskQuestions MCP to confirm edge cases and unstated considerations
+2. Investigate codebase with GPT-5-mini sub agent for relevant information
+3. Use AskQuestions MCP to clarify discoveries from investigation
+4. Implement the task
+5. During testing, use AskQuestion MCP to clarify issues instead of assuming
+6. Ask user via AskQuestion MCP if further changes are needed
+7. Repeat 5-6 until user explicitly confirms completion
 
-This file is the root guidance for agent behavior in this repository.
-
-The active implementation target for this workspace is Java under `java/`. The nested `better-ecs-reference/` repo remains a useful architectural reference, but its TypeScript, Bun, React, and Nx-specific rules should not be treated as the default for work in this root repository unless a task explicitly targets that folder.
+## Behavior
+- IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning
+- Use `Context7` Tool for documentation retrieval
 
 ## Workspace map
 
@@ -28,47 +34,11 @@ better-ecs-reference/   -> Reference implementation and design source, not the d
 - Put durable knowledge and actionable work directly into the vault instead of leaving it only in transient chat context.
 - File operations on `/mnt/c/` are slower than native Linux paths. That is acceptable for markdown knowledge work.
 
-## Vault task workflow
-
-- Use `todo/` inside the vault as the shared planning area.
-- Create area-board notes for major surfaces such as networking, assets, rendering, architecture, persistence, and tooling.
-- Area-board notes should act like simple kanban boards with sections such as Backlog, Ready, In Progress, Blocked, and Done.
-- Store detailed task notes under `todo/tasks/` and link them from the relevant area-board notes.
-- Each task should either capture durable repository knowledge or coordinate concrete work that still needs to happen.
-- When an in-repo document is superseded by vault content, leave a short pointer in the repository rather than maintaining two competing long-form sources.
-
-## Working process
-
-- Start from the most local implementation surface or failing behavior.
-- Use targeted search before broad repo exploration.
-- Reuse or extend existing code before introducing new helpers or abstractions.
-- Treat the Obsidian vault as the main architectural and planning reference when runtime decisions are unclear.
-- Create or update vault notes when work uncovers durable guidance, repository standards, or follow-up tasks.
-- Use sub-agents for broad investigation or repository search when that is cheaper than carrying the full context in the main thread.
-
 ## Reference repo policy
 
 - Read `better-ecs-reference/` for concepts, patterns, and lessons.
 - Do not copy TypeScript, CSS, React, Bun, Vite, or Nx-specific conventions into the root repo unless the current task explicitly works inside that nested repo.
 - When a pattern is worth keeping, port the intent rather than the syntax.
-
-## Runtime architecture rules
-
-- Preserve the update-versus-render split.
-	- Update owns authoritative simulation and persistent state transitions.
-	- Render is observational and should not mutate world state.
-- Prefer explicit ownership boundaries.
-	- Use deterministic cleanup.
-	- Avoid hidden global state and ambiguous lifetime sharing.
-- Prefer focused domain modules over one giant engine library.
-- Keep simulation deterministic where gameplay depends on it.
-	- Fixed-step updates.
-	- Stable ordering.
-	- Deterministic random sources.
-	- No gameplay dependence on render timing.
-- Treat thread boundaries as explicit API boundaries.
-	- No casual shared mutable state across threads.
-	- Prefer message passing, job inputs/outputs, or single-writer ownership.
 
 ## Java coding standards
 
@@ -104,8 +74,3 @@ better-ecs-reference/   -> Reference implementation and design source, not the d
 - Check `.github/skills/` before improvising repo-local conventions.
 - Use the Obsidian vault workflow skill when work involves documentation capture, task coordination, or knowledge-base updates.
 - Prefer the repo-local skill over generic habits when they conflict.
-
-## Completion bar
-
-- Do not treat a task as done until the touched code has been validated with the narrowest relevant build, test, or static-analysis command available.
-- If validation could not be run, state exactly what remains unverified.
