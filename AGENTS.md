@@ -63,6 +63,11 @@ better-ecs-reference/   -> Reference implementation and design source, not the d
 - Use narrower validation first for touched code, then widen as needed.
 - If formatting or static analysis is configured, use the narrowest relevant Java tooling on touched code.
 
+## Definition of done
+
+- Manually run the application for behavior-changing work before declaring the task complete.
+- Include the manual runtime verification result in the completion summary, alongside any narrower build or compile checks.
+
 ## File and module design
 
 - Prefer feature-oriented folders and packages.

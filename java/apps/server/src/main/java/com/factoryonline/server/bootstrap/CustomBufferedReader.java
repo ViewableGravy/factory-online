@@ -53,11 +53,11 @@ public final class CustomBufferedReader implements Closeable {
         while (true) {
             int nextByte = readNextByte();
             if (nextByte == -1) {
-                if (pendingLine.length() == 0) {
-                    if (shouldKeepWaitingOnTerminal()) {
-                        continue;
-                    }
+                if (shouldKeepWaitingOnTerminal()) {
+                    continue;
+                }
 
+                if (pendingLine.length() == 0) {
                     return null;
                 }
 

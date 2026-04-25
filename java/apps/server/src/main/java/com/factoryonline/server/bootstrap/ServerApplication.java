@@ -14,6 +14,8 @@ import com.factoryonline.transport.local.LocalServerTransport;
 import com.factoryonline.transport.local.SimulationInputRequest;
 
 public final class ServerApplication {
+    private static final String ADD_SIMULATION_COMMAND = "/add-simulation";
+    private static final String SIMULATION_NAME_PREFIX = "Simulation ";
     private static final SimulationId PRIMARY_SIMULATION_ID = new SimulationId("Simulation 1");
 
     private final LocalServerTransport transport;
@@ -45,6 +47,19 @@ public final class ServerApplication {
 
     public void advanceTick() {
         pendingSimulationTick = ticker.tick();
+    }
+
+    public void handleAdminCommand(String rawCommand) {
+        String normalizedCommand = Objects.requireNonNull(rawCommand, "rawCommand").strip();
+
+        if (!ADD_SIMULATION_COMMAND.equalsIgnoreCase(normalizedCommand)) {
+            System.out.println("Server ignored unknown command: " + normalizedCommand);
+            return;
+        }
+
+        Simulation simulation = new Simulation(createNextSimulationId());
+        registerSimulation(simulation);
+        System.out.println("Server added simulation " + simulation.getId() + " in base state");
     }
 
     public void simulateCurrentTick() {
@@ -109,5 +124,17 @@ public final class ServerApplication {
     private void registerSimulation(Simulation simulation) {
         registry.register(simulation);
         runner.addSimulation(simulation);
+    }
+
+    private SimulationId createNextSimulationId() {
+        int simulationNumber = registry.all().size() + 1;
+        SimulationId candidateId = new SimulationId(SIMULATION_NAME_PREFIX + simulationNumber);
+
+        while (registry.getOrNull(candidateId) != null) {
+            simulationNumber += 1;
+            candidateId = new SimulationId(SIMULATION_NAME_PREFIX + simulationNumber);
+        }
+
+        return candidateId;
     }
 }

@@ -18,6 +18,10 @@ public final class Main {
     private Main() {
     }
 
+    private static boolean isServerCommand(CustomUserInput userInput) {
+        return userInput.getRaw().strip().startsWith("/");
+    }
+
     public static void main(String[] args) throws IOException {
         LocalTransportHub transport = new LocalTransportHub(TRANSPORT_DELAY_TICKS);
         ClientApplication client = new ClientApplication(
@@ -35,7 +39,7 @@ public final class Main {
 
         try {
             try (CustomBufferedReader reader = new CustomBufferedReader(System.in)) {
-                System.out.print("Client input (Enter=tick, up/down=apply, exit=quit): ");
+                System.out.print("Client input (Enter=tick, up/down=apply, /add-simulation=server, exit=quit): ");
                 CustomUserInput userInput;
 
                 while ((userInput = reader.readLine()) != null) {
@@ -43,6 +47,12 @@ public final class Main {
 
                     if (userInput.isExit())
                         break;
+
+                    if (isServerCommand(userInput)) {
+                        server.handleAdminCommand(userInput.getRaw());
+                        System.out.print("Client input (Enter=tick, up/down=apply, /add-simulation=server, exit=quit): ");
+                        continue;
+                    }
 
                     server.advanceTick();
                     client.advanceTick();
@@ -60,7 +70,7 @@ public final class Main {
                     server.simulateCurrentTick();
                     client.simulateCurrentTick();
 
-                    System.out.print("Client input (Enter=tick, up/down=apply, exit=quit): ");
+                    System.out.print("Client input (Enter=tick, up/down=apply, /add-simulation=server, exit=quit): ");
                 }
             }
         } finally {
