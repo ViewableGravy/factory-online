@@ -7,7 +7,7 @@ import com.factoryonline.foundation.ids.SimulationId;
 import com.factoryonline.simulation.SimulationDirection;
 import com.factoryonline.simulation.SimulationSnapshot;
 
-public final class InitialSimulationStateDTO extends ProtocolDTO {
+public final class InitialSimulationStateDTO extends ProtocolDTO<InitialSimulationState> {
     public static final String ID_VALUE = "initial-simulation-state";
     public static final DTOId ID = new DTOId(ID_VALUE);
 

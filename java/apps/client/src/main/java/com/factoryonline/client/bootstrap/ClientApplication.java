@@ -10,7 +10,9 @@ import java.util.Set;
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
 import com.factoryonline.foundation.protocol.InitialSimulationState;
+import com.factoryonline.foundation.protocol.InitialSimulationStateDTO;
 import com.factoryonline.foundation.protocol.SimulationUpdate;
+import com.factoryonline.foundation.protocol.SimulationUpdateDTO;
 import com.factoryonline.server.bootstrap.BatchedSimulationRunner;
 import com.factoryonline.server.bootstrap.CustomUserInput;
 import com.factoryonline.server.bootstrap.Ticker;
@@ -132,13 +134,13 @@ public final class ClientApplication {
     }
 
     private void receiveInitialStates() {
-        for (InitialSimulationState initialState : transport.drainInitialStates()) {
+        for (InitialSimulationState initialState : transport.drainAs(InitialSimulationStateDTO.class)) {
             attachSimulation(initialState);
         }
     }
 
     private synchronized void receiveSimulationUpdates() {
-        for (SimulationUpdate simulationUpdate : transport.drainSimulationUpdates()) {
+        for (SimulationUpdate simulationUpdate : transport.drainAs(SimulationUpdateDTO.class)) {
             queuedActionsBySimulation
                 .computeIfAbsent(simulationUpdate.getSimulationId(), ignored -> new HashMap<>())
                 .put(simulationUpdate.getTick(), simulationUpdate.getAugmentation());

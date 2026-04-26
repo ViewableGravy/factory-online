@@ -8,22 +8,13 @@ import java.util.Map;
 import java.util.Objects;
 
 import com.factoryonline.foundation.ids.ClientId;
-import com.factoryonline.foundation.protocol.InitialSimulationState;
-import com.factoryonline.foundation.protocol.InitialSimulationStateDTO;
-import com.factoryonline.foundation.protocol.JoinSimulationRequest;
-import com.factoryonline.foundation.protocol.JoinSimulationRequestDTO;
 import com.factoryonline.foundation.protocol.ProtocolDTO;
 import com.factoryonline.foundation.protocol.ProtocolDTOContainer;
-import com.factoryonline.foundation.protocol.SimulationInputRequest;
-import com.factoryonline.foundation.protocol.SimulationInputRequestDTO;
-import com.factoryonline.foundation.protocol.SimulationUpdate;
-import com.factoryonline.foundation.protocol.SimulationUpdateDTO;
 
 public final class LocalTransportHub {
     private final int transportDelayTicks;
     private final Map<ClientId, ClientInbox> clientInboxes = new HashMap<>();
-    private final List<ScheduledValue<String>> scheduledJoinRequests = new ArrayList<>();
-    private final List<ScheduledValue<String>> scheduledSimulationInputRequests = new ArrayList<>();
+    private final MessageQueue serverInbox = new MessageQueue();
     private int currentTick;
 
     public LocalTransportHub() {
@@ -56,66 +47,25 @@ public final class LocalTransportHub {
         return currentTick;
     }
 
-    synchronized void sendJoinRequest(JoinSimulationRequestDTO joinRequest) {
-        scheduledJoinRequests.add(new ScheduledValue<>(
-            Objects.requireNonNull(joinRequest, "joinRequest").serialize(),
-            currentTick));
+    synchronized void sendToServer(ProtocolDTO<?> dto, boolean delayed) {
+        serverInbox.schedule(
+            Objects.requireNonNull(dto, "dto"),
+            currentTick + (delayed ? transportDelayTicks : 0));
     }
 
-    synchronized List<JoinSimulationRequest> drainJoinRequests() {
-        List<JoinSimulationRequest> joinRequests = new ArrayList<>();
-        for (String serializedDto : drainReady(scheduledJoinRequests)) {
-            joinRequests.add(deserializeJoinRequest(serializedDto));
-        }
-
-        return joinRequests;
+    synchronized <T, D extends ProtocolDTO<T>> List<T> drainServerAs(Class<D> dtoClass) {
+        return serverInbox.drainAs(dtoClass, currentTick);
     }
 
-    synchronized void sendSimulationInputRequest(SimulationInputRequestDTO simulationInputRequest) {
-        scheduledSimulationInputRequests.add(new ScheduledValue<>(
-            Objects.requireNonNull(simulationInputRequest, "simulationInputRequest").serialize(),
-            currentTick + transportDelayTicks));
-    }
-
-    synchronized List<SimulationInputRequest> drainSimulationInputRequests() {
-        List<SimulationInputRequest> inputRequests = new ArrayList<>();
-        for (String serializedDto : drainReady(scheduledSimulationInputRequests)) {
-            inputRequests.add(deserializeSimulationInputRequest(serializedDto));
-        }
-
-        return inputRequests;
-    }
-
-    synchronized void sendInitialState(ClientId clientId, InitialSimulationStateDTO initialState) {
+    synchronized void sendToClient(ClientId clientId, ProtocolDTO<?> dto) {
         ClientInbox inbox = requireClientInbox(clientId);
-        inbox.scheduledInitialStates.add(new ScheduledValue<>(
-            Objects.requireNonNull(initialState, "initialState").serialize(),
-            currentTick + transportDelayTicks));
+        inbox.messageQueue.schedule(
+            Objects.requireNonNull(dto, "dto"),
+            currentTick + transportDelayTicks);
     }
 
-    synchronized List<InitialSimulationState> drainInitialStates(ClientId clientId) {
-        List<InitialSimulationState> initialStates = new ArrayList<>();
-        for (String serializedDto : drainReady(requireClientInbox(clientId).scheduledInitialStates)) {
-            initialStates.add(deserializeInitialState(serializedDto));
-        }
-
-        return initialStates;
-    }
-
-    synchronized void sendSimulationUpdate(ClientId clientId, SimulationUpdateDTO simulationUpdate) {
-        ClientInbox inbox = requireClientInbox(clientId);
-        inbox.scheduledSimulationUpdates.add(new ScheduledValue<>(
-            Objects.requireNonNull(simulationUpdate, "simulationUpdate").serialize(),
-            currentTick + transportDelayTicks));
-    }
-
-    synchronized List<SimulationUpdate> drainSimulationUpdates(ClientId clientId) {
-        List<SimulationUpdate> simulationUpdates = new ArrayList<>();
-        for (String serializedDto : drainReady(requireClientInbox(clientId).scheduledSimulationUpdates)) {
-            simulationUpdates.add(deserializeSimulationUpdate(serializedDto));
-        }
-
-        return simulationUpdates;
+    synchronized <T, D extends ProtocolDTO<T>> List<T> drainClientAs(ClientId clientId, Class<D> dtoClass) {
+        return requireClientInbox(clientId).messageQueue.drainAs(dtoClass, currentTick);
     }
 
     private ClientInbox requireClientInbox(ClientId clientId) {
@@ -128,66 +78,50 @@ public final class LocalTransportHub {
         return inbox;
     }
 
-    private <T> List<T> drainReady(List<ScheduledValue<T>> scheduledValues) {
-        List<T> readyValues = new ArrayList<>();
-        Iterator<ScheduledValue<T>> iterator = scheduledValues.iterator();
+    private static final class ClientInbox {
+        private final MessageQueue messageQueue = new MessageQueue();
+    }
 
-        while (iterator.hasNext()) {
-            ScheduledValue<T> scheduledValue = iterator.next();
-            if (scheduledValue.deliveryTick > currentTick) {
-                continue;
+    private static final class MessageQueue {
+        private final List<ScheduledValue<ProtocolDTOContainer>> scheduledDtos = new ArrayList<>();
+        private final Map<String, List<ProtocolDTOContainer>> queuedDtosById = new HashMap<>();
+
+        private void schedule(ProtocolDTO<?> dto, int deliveryTick) {
+            scheduledDtos.add(new ScheduledValue<>(dto.toContainer(), deliveryTick));
+        }
+
+        private <T, D extends ProtocolDTO<T>> List<T> drainAs(Class<D> dtoClass, int currentTick) {
+            drain(currentTick);
+
+            String dtoId = ProtocolDTO.resolveId(dtoClass).value();
+            List<ProtocolDTOContainer> queuedDtos = queuedDtosById.remove(dtoId);
+            if (queuedDtos == null || queuedDtos.isEmpty()) {
+                return List.of();
             }
 
-            readyValues.add(scheduledValue.value);
-            iterator.remove();
+            List<T> drainedValues = new ArrayList<>(queuedDtos.size());
+            for (ProtocolDTOContainer queuedDto : queuedDtos) {
+                drainedValues.add(ProtocolDTO.fromContainer(dtoClass, queuedDto));
+            }
+
+            return drainedValues;
         }
 
-        return readyValues;
-    }
+        private void drain(int currentTick) {
+            Iterator<ScheduledValue<ProtocolDTOContainer>> iterator = scheduledDtos.iterator();
 
-    private JoinSimulationRequest deserializeJoinRequest(String serializedDto) {
-        ProtocolDTOContainer dto = ProtocolDTO.deserialize(serializedDto);
-        switch (dto.getId().value()) {
-            case JoinSimulationRequestDTO.ID_VALUE:
-                return JoinSimulationRequestDTO.from(dto.getData());
-            default:
-                throw new IllegalArgumentException("Unexpected join request DTO id: " + dto.getId());
+            while (iterator.hasNext()) {
+                ScheduledValue<ProtocolDTOContainer> scheduledDto = iterator.next();
+                if (scheduledDto.deliveryTick > currentTick) {
+                    continue;
+                }
+
+                queuedDtosById
+                    .computeIfAbsent(scheduledDto.value.getId().value(), ignored -> new ArrayList<>())
+                    .add(scheduledDto.value);
+                iterator.remove();
+            }
         }
-    }
-
-    private SimulationInputRequest deserializeSimulationInputRequest(String serializedDto) {
-        ProtocolDTOContainer dto = ProtocolDTO.deserialize(serializedDto);
-        switch (dto.getId().value()) {
-            case SimulationInputRequestDTO.ID_VALUE:
-                return SimulationInputRequestDTO.from(dto.getData());
-            default:
-                throw new IllegalArgumentException("Unexpected simulation input DTO id: " + dto.getId());
-        }
-    }
-
-    private InitialSimulationState deserializeInitialState(String serializedDto) {
-        ProtocolDTOContainer dto = ProtocolDTO.deserialize(serializedDto);
-        switch (dto.getId().value()) {
-            case InitialSimulationStateDTO.ID_VALUE:
-                return InitialSimulationStateDTO.from(dto.getData());
-            default:
-                throw new IllegalArgumentException("Unexpected initial state DTO id: " + dto.getId());
-        }
-    }
-
-    private SimulationUpdate deserializeSimulationUpdate(String serializedDto) {
-        ProtocolDTOContainer dto = ProtocolDTO.deserialize(serializedDto);
-        switch (dto.getId().value()) {
-            case SimulationUpdateDTO.ID_VALUE:
-                return SimulationUpdateDTO.from(dto.getData());
-            default:
-                throw new IllegalArgumentException("Unexpected simulation update DTO id: " + dto.getId());
-        }
-    }
-
-    private static final class ClientInbox {
-        private final List<ScheduledValue<String>> scheduledInitialStates = new ArrayList<>();
-        private final List<ScheduledValue<String>> scheduledSimulationUpdates = new ArrayList<>();
     }
 
     private static final class ScheduledValue<T> {

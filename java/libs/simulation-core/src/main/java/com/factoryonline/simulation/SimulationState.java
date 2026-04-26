@@ -4,7 +4,7 @@ import java.util.Objects;
 
 public final class SimulationState {
     static final int MIN_VALUE = 0;
-    static final int MAX_VALUE = 10;
+    static final int MAX_VALUE = 100;
 
     private int value;
     private SimulationDirection direction;

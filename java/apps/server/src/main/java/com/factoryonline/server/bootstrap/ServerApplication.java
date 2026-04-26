@@ -7,7 +7,9 @@ import java.util.Objects;
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
 import com.factoryonline.foundation.protocol.JoinSimulationRequest;
+import com.factoryonline.foundation.protocol.JoinSimulationRequestDTO;
 import com.factoryonline.foundation.protocol.SimulationInputRequest;
+import com.factoryonline.foundation.protocol.SimulationInputRequestDTO;
 import com.factoryonline.simulation.Simulation;
 import com.factoryonline.simulation.SimulationActionResult;
 import com.factoryonline.simulation.SimulationRegistry;
@@ -38,6 +40,7 @@ public final class ServerApplication {
     public void setup() {
         registerSimulation(new Simulation(PRIMARY_SIMULATION_ID));
         registerSimulation(new Simulation(new SimulationId("Simulation 2")));
+        registerSimulation(new Simulation(new SimulationId("Simulation 3")));
     }
 
     public void processIncomingMessages() {
@@ -47,6 +50,19 @@ public final class ServerApplication {
 
     public void advanceTick() {
         pendingSimulationTick = ticker.tick();
+    }
+
+    public void simulateCurrentTick() {
+        if (pendingSimulationTick <= 0)
+            return;
+
+        runner.runTick(pendingSimulationTick);
+        pendingSimulationTick = -1;
+    }
+
+    public void cleanup() {
+        ticker.shutdown();
+        runner.close();
     }
 
     public void handleAdminCommand(String rawCommand) {
@@ -62,22 +78,8 @@ public final class ServerApplication {
         System.out.println("Server added simulation " + simulation.getId() + " in base state");
     }
 
-    public void simulateCurrentTick() {
-        if (pendingSimulationTick <= 0) {
-            return;
-        }
-
-        runner.runTick(pendingSimulationTick);
-        pendingSimulationTick = -1;
-    }
-
-    public void cleanup() {
-        ticker.shutdown();
-        runner.close();
-    }
-
     private void handleJoinRequests() {
-        for (JoinSimulationRequest joinRequest : transport.drainJoinRequests()) {
+        for (JoinSimulationRequest joinRequest : transport.drainAs(JoinSimulationRequestDTO.class)) {
             ClientId clientId = joinRequest.getClientId();
             if (simulationIdsByClientId.containsKey(clientId)) {
                 System.out.println("Server ignored duplicate join from " + clientId);
@@ -103,7 +105,7 @@ public final class ServerApplication {
     }
 
     private void handleSimulationInputRequests() {
-        for (SimulationInputRequest inputRequest : transport.drainSimulationInputRequests()) {
+        for (SimulationInputRequest inputRequest : transport.drainAs(SimulationInputRequestDTO.class)) {
             Simulation simulation = registry.get(inputRequest.getSimulationId());
             SimulationActionResult result = simulation.applyAction(inputRequest.getAugmentation());
             if (!result.isSuccess()) {

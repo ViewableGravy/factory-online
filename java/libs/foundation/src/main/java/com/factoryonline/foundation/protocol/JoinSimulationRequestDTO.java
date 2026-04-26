@@ -6,7 +6,7 @@ import java.util.Objects;
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
 
-public final class JoinSimulationRequestDTO extends ProtocolDTO {
+public final class JoinSimulationRequestDTO extends ProtocolDTO<JoinSimulationRequest> {
     public static final String ID_VALUE = "join-simulation-request";
     public static final DTOId ID = new DTOId(ID_VALUE);
 

@@ -7,7 +7,7 @@ import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
 import com.factoryonline.simulation.SimulationAugmentation;
 
-public final class SimulationInputRequestDTO extends ProtocolDTO {
+public final class SimulationInputRequestDTO extends ProtocolDTO<SimulationInputRequest> {
     public static final String ID_VALUE = "simulation-input-request";
     public static final DTOId ID = new DTOId(ID_VALUE);
 

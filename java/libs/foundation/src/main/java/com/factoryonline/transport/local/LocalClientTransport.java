@@ -5,10 +5,9 @@ import java.util.Objects;
 
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
-import com.factoryonline.foundation.protocol.InitialSimulationState;
 import com.factoryonline.foundation.protocol.JoinSimulationRequestDTO;
+import com.factoryonline.foundation.protocol.ProtocolDTO;
 import com.factoryonline.foundation.protocol.SimulationInputRequestDTO;
-import com.factoryonline.foundation.protocol.SimulationUpdate;
 import com.factoryonline.simulation.SimulationAugmentation;
 
 public final class LocalClientTransport {
@@ -25,22 +24,18 @@ public final class LocalClientTransport {
     }
 
     public void requestJoin(SimulationId simulationId) {
-        transportHub.sendJoinRequest(new JoinSimulationRequestDTO(clientId, simulationId));
+        transportHub.sendToServer(new JoinSimulationRequestDTO(clientId, simulationId), false);
     }
 
     public void sendSimulationInput(SimulationId simulationId, SimulationAugmentation augmentation) {
-        transportHub.sendSimulationInputRequest(new SimulationInputRequestDTO(clientId, simulationId, augmentation));
+        transportHub.sendToServer(new SimulationInputRequestDTO(clientId, simulationId, augmentation), true);
     }
 
     public int getCurrentTick() {
         return transportHub.getCurrentTick();
     }
 
-    public List<InitialSimulationState> drainInitialStates() {
-        return transportHub.drainInitialStates(clientId);
-    }
-
-    public List<SimulationUpdate> drainSimulationUpdates() {
-        return transportHub.drainSimulationUpdates(clientId);
+    public <T, D extends ProtocolDTO<T>> List<T> drainAs(Class<D> dtoClass) {
+        return transportHub.drainClientAs(clientId, dtoClass);
     }
 }

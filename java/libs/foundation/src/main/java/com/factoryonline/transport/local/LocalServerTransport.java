@@ -6,8 +6,7 @@ import java.util.Objects;
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
 import com.factoryonline.foundation.protocol.InitialSimulationStateDTO;
-import com.factoryonline.foundation.protocol.JoinSimulationRequest;
-import com.factoryonline.foundation.protocol.SimulationInputRequest;
+import com.factoryonline.foundation.protocol.ProtocolDTO;
 import com.factoryonline.foundation.protocol.SimulationUpdateDTO;
 import com.factoryonline.simulation.SimulationAugmentation;
 import com.factoryonline.simulation.SimulationSnapshot;
@@ -19,19 +18,15 @@ public final class LocalServerTransport {
         this.transportHub = Objects.requireNonNull(transportHub, "transportHub");
     }
 
-    public List<JoinSimulationRequest> drainJoinRequests() {
-        return transportHub.drainJoinRequests();
-    }
-
-    public List<SimulationInputRequest> drainSimulationInputRequests() {
-        return transportHub.drainSimulationInputRequests();
+    public <T, D extends ProtocolDTO<T>> List<T> drainAs(Class<D> dtoClass) {
+        return transportHub.drainServerAs(dtoClass);
     }
 
     public void sendInitialState(ClientId clientId, SimulationId simulationId, SimulationSnapshot snapshot, int tick) {
-        transportHub.sendInitialState(clientId, new InitialSimulationStateDTO(simulationId, snapshot, tick));
+        transportHub.sendToClient(clientId, new InitialSimulationStateDTO(simulationId, snapshot, tick));
     }
 
     public void sendSimulationUpdate(ClientId clientId, SimulationId simulationId, SimulationAugmentation augmentation, int tick) {
-        transportHub.sendSimulationUpdate(clientId, new SimulationUpdateDTO(simulationId, augmentation, tick));
+        transportHub.sendToClient(clientId, new SimulationUpdateDTO(simulationId, augmentation, tick));
     }
 }
