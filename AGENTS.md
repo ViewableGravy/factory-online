@@ -3,7 +3,7 @@
 - NEVER replace hard coded calls with loops unless explicitply asked to
 
 # Agentic Workflow
-## Request to Completion workflow
+## Request to Completion workflow (MUST FOLLOW FOR ALL REQUESTS)
 1. Use AskQuestions MCP to confirm edge cases and unstated considerations
 2. Investigate codebase with GPT-5-mini sub agent for relevant information
 3. Use AskQuestions MCP to clarify discoveries from investigation
