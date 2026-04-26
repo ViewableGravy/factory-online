@@ -3,9 +3,11 @@ package com.factoryonline.server;
 import java.io.IOException;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import com.factoryonline.foundation.config.NetworkConfig;
+import com.factoryonline.foundation.config.RuntimeTiming;
+import com.factoryonline.foundation.config.TerminalCommands;
 import com.factoryonline.foundation.timing.TickDeadline;
 import com.factoryonline.server.bootstrap.CustomBufferedReader;
 import com.factoryonline.server.bootstrap.CustomUserInput;
@@ -14,29 +16,27 @@ import com.factoryonline.server.bootstrap.TerminalUiState;
 import com.factoryonline.transport.tcp.TcpServerTransport;
 
 public final class Main {
-    private static final int DEFAULT_PORT = 9999;
-    private static final int TICK_INTERVAL_MILLIS = 100;
-    private static final long TICK_INTERVAL_NANOS = TimeUnit.MILLISECONDS.toNanos(TICK_INTERVAL_MILLIS);
-    private static final String SERVER_COMMAND_PREFIX = "/server";
-
     private static final AtomicBoolean promptRequested = new AtomicBoolean(false);
 
     private Main() {
     }
 
     private static boolean isAdminCommand(CustomUserInput userInput) {
-        return userInput.getRaw().strip().startsWith("/") && !userInput.getRaw().strip().startsWith(SERVER_COMMAND_PREFIX + " ");
+        String normalizedInput = userInput.getRaw().strip();
+        String serverCommandPrefix = TerminalCommands.SERVER_COMMAND_PREFIX + " ";
+        return normalizedInput.startsWith("/") && !normalizedInput.startsWith(serverCommandPrefix);
     }
 
     public static void main(String[] args) throws IOException {
         Queue<String> queuedCommands = new ConcurrentLinkedQueue<>();
         AtomicBoolean running = new AtomicBoolean(true);
 
-        try (TcpServerTransport transport = new TcpServerTransport(DEFAULT_PORT)) {
+        try (TcpServerTransport transport = new TcpServerTransport(NetworkConfig.DEFAULT_PORT)) {
             ServerApplication server = new ServerApplication(transport);
             server.setup();
 
-            System.out.println(TerminalUiState.getInstance().formatServerLabel() + " listening on port " + DEFAULT_PORT);
+            System.out.println(
+                TerminalUiState.getInstance().formatServerLabel() + " listening on port " + NetworkConfig.DEFAULT_PORT);
 
             Thread tickThread = startServerLoop(server, queuedCommands, running);
             try {
@@ -67,11 +67,12 @@ public final class Main {
 
     private static String extractServerCommand(CustomUserInput userInput) {
         String normalizedInput = userInput.getRaw().strip();
-        if (!normalizedInput.startsWith(SERVER_COMMAND_PREFIX + " ")) {
+        String serverCommandPrefix = TerminalCommands.SERVER_COMMAND_PREFIX + " ";
+        if (!normalizedInput.startsWith(serverCommandPrefix)) {
             return null;
         }
 
-        String command = normalizedInput.substring((SERVER_COMMAND_PREFIX + " ").length()).strip();
+        String command = normalizedInput.substring(serverCommandPrefix.length()).strip();
         if (command.isEmpty()) {
             return null;
         }
@@ -85,7 +86,7 @@ public final class Main {
         AtomicBoolean running
     ) {
         Thread tickThread = new Thread(() -> {
-            TickDeadline tickDeadline = new TickDeadline(TICK_INTERVAL_NANOS);
+            TickDeadline tickDeadline = new TickDeadline(RuntimeTiming.TICK_INTERVAL_NANOS);
             while (running.get()) {
                 server.advanceTick();
                 drainCommands(server, queuedCommands);
@@ -118,7 +119,7 @@ public final class Main {
         String serverCommand = extractServerCommand(userInput);
         if (serverCommand != null) {
             if (CustomUserInput.fromRaw(serverCommand).isContinue()) {
-                System.out.println("Unknown /server command: " + serverCommand);
+                System.out.println("Unknown " + TerminalCommands.SERVER_COMMAND_PREFIX + " command: " + serverCommand);
                 return;
             }
 
@@ -135,7 +136,16 @@ public final class Main {
     }
 
     private static void printPrompt() {
-        System.out.print("Server [/snapshot, /add-simulation, /server up|down, exit]: ");
+        System.out.print(
+            "Server ["
+                + TerminalCommands.SNAPSHOT_COMMAND
+                + ", "
+                + TerminalCommands.ADD_SIMULATION_COMMAND
+                + ", "
+                + TerminalCommands.SERVER_DIRECTION_USAGE
+                + ", "
+                + TerminalCommands.EXIT_COMMAND
+                + "]: ");
     }
 
     private static void interruptAndJoin(Thread thread) {

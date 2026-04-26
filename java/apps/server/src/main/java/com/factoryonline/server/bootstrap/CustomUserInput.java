@@ -2,6 +2,8 @@ package com.factoryonline.server.bootstrap;
 
 import java.util.Objects;
 
+import com.factoryonline.foundation.config.TerminalCommands;
+
 public final class CustomUserInput {
     public enum Kind {
         INCREMENT,
@@ -30,17 +32,17 @@ public final class CustomUserInput {
             return new CustomUserInput(validatedRaw, Kind.CONTINUE);
         }
 
-        if (ARROW_UP.equals(validatedRaw) || normalizedRaw.equalsIgnoreCase("up")) {
+        if (ARROW_UP.equals(validatedRaw) || normalizedRaw.equalsIgnoreCase(TerminalCommands.INCREMENT_COMMAND)) {
             return new CustomUserInput(validatedRaw, Kind.INCREMENT);
         }
 
-        if (ARROW_DOWN.equals(validatedRaw) || normalizedRaw.equalsIgnoreCase("down")) {
+        if (ARROW_DOWN.equals(validatedRaw) || normalizedRaw.equalsIgnoreCase(TerminalCommands.DECREMENT_COMMAND)) {
             return new CustomUserInput(validatedRaw, Kind.DECREMENT);
         }
 
         if (ESCAPE.equals(validatedRaw)
-            || normalizedRaw.equalsIgnoreCase("esc")
-            || normalizedRaw.equalsIgnoreCase("exit")) {
+            || normalizedRaw.equalsIgnoreCase(TerminalCommands.ESCAPE_COMMAND)
+            || normalizedRaw.equalsIgnoreCase(TerminalCommands.EXIT_COMMAND)) {
             return new CustomUserInput(validatedRaw, Kind.EXIT);
         }
 

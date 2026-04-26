@@ -7,6 +7,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
 
+import com.factoryonline.foundation.config.RuntimeTiming;
+import com.factoryonline.foundation.config.TerminalCommands;
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
 import com.factoryonline.foundation.ids.SimulationIds;
@@ -27,9 +29,6 @@ import com.factoryonline.simulation.SimulationRegistry;
 import com.factoryonline.transport.ServerTransport;
 
 public final class ServerApplication {
-    private static final String ADD_SIMULATION_COMMAND = "/add-simulation";
-    private static final String SNAPSHOT_COMMAND = "/snapshot";
-    private static final int TICK_SYNC_INTERVAL = 2;
     private static final TerminalUiState TERMINAL_UI_STATE = TerminalUiState.getInstance();
 
     private final ServerTransport transport;
@@ -75,7 +74,7 @@ public final class ServerApplication {
 
         applyBufferedInputs(pendingSimulationTick);
         runner.runTick(pendingSimulationTick);
-        if (pendingSimulationTick % TICK_SYNC_INTERVAL == 0) {
+        if (pendingSimulationTick % RuntimeTiming.SERVER_TICK_SYNC_INTERVAL == 0) {
             for (Simulation simulation : registry.all()) {
                 broadcaster.broadcastTickSync(
                     simulation.getId(),
@@ -94,12 +93,12 @@ public final class ServerApplication {
     public void handleAdminCommand(String rawCommand) {
         String normalizedCommand = Objects.requireNonNull(rawCommand, "rawCommand").strip();
 
-        if (SNAPSHOT_COMMAND.equalsIgnoreCase(normalizedCommand)) {
+        if (TerminalCommands.SNAPSHOT_COMMAND.equalsIgnoreCase(normalizedCommand)) {
             runner.requestSnapshot();
             return;
         }
 
-        if (!ADD_SIMULATION_COMMAND.equalsIgnoreCase(normalizedCommand)) {
+        if (!TerminalCommands.ADD_SIMULATION_COMMAND.equalsIgnoreCase(normalizedCommand)) {
             System.out.println("Server ignored unknown command: " + normalizedCommand);
             return;
         }
@@ -116,13 +115,21 @@ public final class ServerApplication {
         SimulationAugmentation augmentation = toAugmentation(serverInput);
         if (augmentation == null) {
             System.out.println(
-                TERMINAL_UI_STATE.formatServerLabel() + " ignored unknown /server command: " + rawCommand.strip());
+                TERMINAL_UI_STATE.formatServerLabel()
+                    + " ignored unknown "
+                    + TerminalCommands.SERVER_COMMAND_PREFIX
+                    + " command: "
+                    + rawCommand.strip());
             return;
         }
 
         Session serverSession = findAnySession();
         if (serverSession == null) {
-            System.out.println(TERMINAL_UI_STATE.formatServerLabel() + " ignored /server command: no active sessions");
+            System.out.println(
+                TERMINAL_UI_STATE.formatServerLabel()
+                    + " ignored "
+                    + TerminalCommands.SERVER_COMMAND_PREFIX
+                    + " command: no active sessions");
             return;
         }
 
@@ -130,14 +137,21 @@ public final class ServerApplication {
         SimulationActionResult validationResult = queueValidatedInput(serverSession, augmentation, targetTick);
         if (!validationResult.isSuccess()) {
             System.out.println(
-                TERMINAL_UI_STATE.formatServerLabel() + " rejected /server input: " + validationResult.getError());
+                TERMINAL_UI_STATE.formatServerLabel()
+                    + " rejected "
+                    + TerminalCommands.SERVER_COMMAND_PREFIX
+                    + " input: "
+                    + validationResult.getError());
             return;
         }
 
         broadcaster.broadcast(serverSession.getSimulationId(), targetTick, augmentation);
         System.out.println(
             TERMINAL_UI_STATE.formatServerLabel()
-                + " applied /server input for tick " + targetTick
+                + " applied "
+                + TerminalCommands.SERVER_COMMAND_PREFIX
+                + " input for tick "
+                + targetTick
                 + " on " + TERMINAL_UI_STATE.formatSimulation(serverSession.getSimulationId()));
     }
 

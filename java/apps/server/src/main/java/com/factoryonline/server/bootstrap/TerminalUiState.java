@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
+import com.factoryonline.foundation.config.TerminalCommands;
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
 
@@ -68,7 +69,19 @@ public final class TerminalUiState {
             + formatClient(clientId)
             + " -> "
             + formatSimulation(display.simulationId)
-            + "] Enter=tick, up/down=apply, /server up|down, /client X=switch, /add-simulation=server, exit=quit: ";
+            + "] Enter=tick, "
+            + TerminalCommands.INCREMENT_COMMAND
+            + "/"
+            + TerminalCommands.DECREMENT_COMMAND
+            + "=apply, "
+            + TerminalCommands.SERVER_DIRECTION_USAGE
+            + ", "
+            + TerminalCommands.CLIENT_SWITCH_USAGE
+            + "=switch, "
+            + TerminalCommands.ADD_SIMULATION_COMMAND
+            + "=server, "
+            + TerminalCommands.EXIT_COMMAND
+            + "=quit: ";
     }
 
     public synchronized String formatClient(ClientId clientId) {

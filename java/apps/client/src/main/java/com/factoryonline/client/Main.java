@@ -4,10 +4,12 @@ import java.io.IOException;
 import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.factoryonline.client.bootstrap.ClientApplication;
+import com.factoryonline.foundation.config.NetworkConfig;
+import com.factoryonline.foundation.config.RuntimeTiming;
+import com.factoryonline.foundation.config.TerminalCommands;
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationIds;
 import com.factoryonline.foundation.timing.TickDeadline;
@@ -17,18 +19,16 @@ import com.factoryonline.server.bootstrap.TerminalUiState;
 import com.factoryonline.transport.tcp.TcpClientTransport;
 
 public final class Main {
-    private static final String DEFAULT_HOST = "127.0.0.1";
-    private static final int DEFAULT_PORT = 9999;
-    private static final int TICK_INTERVAL_MILLIS = 100;
-    private static final long TICK_INTERVAL_NANOS = TimeUnit.MILLISECONDS.toNanos(TICK_INTERVAL_MILLIS);
-
     public static final ClientId clientId = new ClientId("client-" + UUID.randomUUID().toString().substring(0, 8));
     public static final Queue<CustomUserInput> queuedInputs = new ConcurrentLinkedQueue<>();
     public static final AtomicBoolean running = new AtomicBoolean(true);
     public static final AtomicBoolean promptRequested = new AtomicBoolean(false);
 
     public static void main(String[] args) throws IOException {
-        TcpClientTransport transport = new TcpClientTransport(DEFAULT_HOST, DEFAULT_PORT, clientId);
+        TcpClientTransport transport = new TcpClientTransport(
+            NetworkConfig.DEFAULT_HOST,
+            NetworkConfig.DEFAULT_PORT,
+            clientId);
         ClientApplication client = new ClientApplication(clientId, SimulationIds.RANDOM, transport);
         
         client.setup();
@@ -69,7 +69,7 @@ public final class Main {
 
     private static Thread createTickThread(ClientApplication client, TcpClientTransport transport) {
         Thread tickThread = new Thread(() -> {
-            TickDeadline tickDeadline = new TickDeadline(TICK_INTERVAL_NANOS);
+            TickDeadline tickDeadline = new TickDeadline(RuntimeTiming.TICK_INTERVAL_NANOS);
             while (running.get()) {
                 client.advanceTick();
                 transport.advanceTick();
@@ -103,7 +103,17 @@ public final class Main {
 
     private static void printPrompt() {
         System.out.print(
-            "Client [" + TerminalUiState.getInstance().formatClient(clientId) + "] /snapshot, up/down=apply, exit=quit: ");
+            "Client ["
+                + TerminalUiState.getInstance().formatClient(clientId)
+                + "] "
+                + TerminalCommands.SNAPSHOT_COMMAND
+                + ", "
+                + TerminalCommands.INCREMENT_COMMAND
+                + "/"
+                + TerminalCommands.DECREMENT_COMMAND
+                + "=apply, "
+                + TerminalCommands.EXIT_COMMAND
+                + "=quit: ");
     }
 
     private static void printConnectedMessage() {
