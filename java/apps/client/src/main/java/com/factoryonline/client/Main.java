@@ -22,11 +22,12 @@ public final class Main {
     public static final ClientId clientId = new ClientId("client-" + UUID.randomUUID().toString().substring(0, 8));
     public static final Queue<CustomUserInput> queuedInputs = new ConcurrentLinkedQueue<>();
     public static final AtomicBoolean running = new AtomicBoolean(true);
+    public static final AtomicBoolean promptRequested = new AtomicBoolean(false);
 
     public static void main(String[] args) throws IOException {
         TcpClientTransport transport = new TcpClientTransport(DEFAULT_HOST, DEFAULT_PORT, clientId);
         ClientApplication client = new ClientApplication(clientId, SimulationIds.RANDOM, transport);
-
+        
         client.setup();
 
         printConnectedMessage();
@@ -47,7 +48,7 @@ public final class Main {
                     queuedInputs.add(userInput);
                 }
 
-                printPrompt();
+                promptRequested.set(true);
             }
         }} finally {
             running.set(false);
@@ -77,6 +78,8 @@ public final class Main {
 
                 client.processIncomingMessages();
                 client.simulateCurrentTick();
+
+                printPromptIfRequested();
                 
                 try {
                     Thread.sleep(TICK_INTERVAL_MILLIS);
@@ -90,6 +93,12 @@ public final class Main {
         tickThread.start();
 
         return tickThread;
+    }
+
+    private static void printPromptIfRequested() {
+        if (promptRequested.getAndSet(false) && running.get()) {
+            printPrompt();
+        }
     }
 
     private static void printPrompt() {

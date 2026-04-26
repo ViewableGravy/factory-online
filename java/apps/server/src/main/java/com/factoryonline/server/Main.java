@@ -16,6 +16,8 @@ public final class Main {
     private static final int TICK_INTERVAL_MILLIS = 100;
     private static final String SERVER_COMMAND_PREFIX = "/server";
 
+    private static final AtomicBoolean promptRequested = new AtomicBoolean(false);
+
     private Main() {
     }
 
@@ -49,7 +51,7 @@ public final class Main {
                             queuedCommands.add(userInput.getRaw());
                         }
 
-                        printPrompt();
+                        promptRequested.set(true);
                     }
                 }
             } finally {
@@ -74,19 +76,30 @@ public final class Main {
         return command;
     }
 
-    private static Thread startServerLoop(ServerApplication server, Queue<String> queuedCommands, AtomicBoolean running) {
+    private static Thread startServerLoop(
+        ServerApplication server,
+        Queue<String> queuedCommands,
+        AtomicBoolean running
+    ) {
         Thread tickThread = new Thread(() -> {
             while (running.get()) {
                 server.advanceTick();
                 drainCommands(server, queuedCommands);
                 server.processIncomingMessages();
                 server.simulateCurrentTick();
+                printPromptIfRequested(promptRequested, running);
                 sleepTickInterval();
             }
         }, "split-server-loop");
         tickThread.setDaemon(true);
         tickThread.start();
         return tickThread;
+    }
+
+    private static void printPromptIfRequested(AtomicBoolean promptRequested, AtomicBoolean running) {
+        if (promptRequested.getAndSet(false) && running.get()) {
+            printPrompt();
+        }
     }
 
     private static void drainCommands(ServerApplication server, Queue<String> queuedCommands) {
