@@ -2,14 +2,14 @@ package com.factoryonline.server.bootstrap;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
+import com.factoryonline.foundation.ids.SimulationIds;
 import com.factoryonline.foundation.protocol.AckMessageDTO;
 import com.factoryonline.foundation.protocol.ClientTransportMessage;
 import com.factoryonline.foundation.protocol.InitialSimulationStateDTO;
@@ -28,8 +28,8 @@ import com.factoryonline.transport.ServerTransport;
 
 public final class ServerApplication {
     private static final String ADD_SIMULATION_COMMAND = "/add-simulation";
-    private static final ClientId ACCEPTED_CLIENT_ID = new ClientId("client-1");
-    private static final int TICK_SYNC_INTERVAL = 5;
+    private static final String SNAPSHOT_COMMAND = "/snapshot";
+    private static final int TICK_SYNC_INTERVAL = 500;
     private static final TerminalUiState TERMINAL_UI_STATE = TerminalUiState.getInstance();
 
     private final ServerTransport transport;
@@ -39,7 +39,6 @@ public final class ServerApplication {
     private final Broadcaster broadcaster;
     private final SimulationIdFactory simulationIdFactory;
     private final Map<ClientId, Session> sessionsByClientId = new HashMap<>();
-    private final Set<ClientId> readOnlyClientIds = new HashSet<>();
     private final Map<Integer, List<BufferedSimulationInput>> bufferedInputsByTick = new HashMap<>();
     private final Map<Integer, Map<SimulationId, Simulation>> validationSimulationsByTick = new HashMap<>();
     private int pendingSimulationTick = -1;
@@ -92,6 +91,11 @@ public final class ServerApplication {
     public void handleAdminCommand(String rawCommand) {
         String normalizedCommand = Objects.requireNonNull(rawCommand, "rawCommand").strip();
 
+        if (SNAPSHOT_COMMAND.equalsIgnoreCase(normalizedCommand)) {
+            runner.requestSnapshot();
+            return;
+        }
+
         if (!ADD_SIMULATION_COMMAND.equalsIgnoreCase(normalizedCommand)) {
             System.out.println("Server ignored unknown command: " + normalizedCommand);
             return;
@@ -113,7 +117,12 @@ public final class ServerApplication {
             return;
         }
 
-        Session serverSession = requireSession(ACCEPTED_CLIENT_ID);
+        Session serverSession = findAnySession();
+        if (serverSession == null) {
+            System.out.println(TERMINAL_UI_STATE.formatServerLabel() + " ignored /server command: no active sessions");
+            return;
+        }
+
         int targetTick = ticker.getTick();
         SimulationActionResult validationResult = queueValidatedInput(serverSession, augmentation, targetTick);
         if (!validationResult.isSuccess()) {
@@ -160,33 +169,24 @@ public final class ServerApplication {
             return;
         }
 
-        SimulationId simulationId = joinRequest.getSimulationId();
-        Simulation simulation = registry.getOrNull(simulationId);
+        Simulation simulation = resolveRequestedSimulation(joinRequest.getSimulationId());
         if (simulation == null) {
-            reject(clientId, simulationId, "join rejected: simulation not found");
+            reject(clientId, joinRequest.getSimulationId(), "join rejected: simulation not found");
             return;
         }
 
+        SimulationId simulationId = simulation.getId();
+
         Session session = new Session(clientId, simulationId);
         sessionsByClientId.put(clientId, session);
-        boolean readOnlySession = !ACCEPTED_CLIENT_ID.equals(clientId);
-        if (readOnlySession) {
-            readOnlyClientIds.add(clientId);
-        }
 
         broadcaster.subscribe(simulationId, clientId);
         transport.send(clientId, new InitialSimulationStateDTO(simulationId, simulation.snapshot(), ticker.getTick()));
-        transport.send(
-            clientId,
-            new AckMessageDTO(
-                simulationId,
-                ticker.getTick(),
-                readOnlySession ? "join accepted (read-only)" : "join accepted"));
+        transport.send(clientId, new AckMessageDTO(simulationId, ticker.getTick(), "join accepted"));
 
         System.out.println(
             TERMINAL_UI_STATE.formatServerLabel() + " accepted join from " + TERMINAL_UI_STATE.formatClient(clientId)
                 + " for " + TERMINAL_UI_STATE.formatSimulation(simulationId)
-                + (readOnlySession ? " as read-only" : "")
                 + " at current server tick " + ticker.getTick());
     }
 
@@ -197,11 +197,6 @@ public final class ServerApplication {
         Session session = sessionsByClientId.get(clientId);
         if (session == null) {
             reject(clientId, inputRequest.getSimulationId(), "input rejected: no active session");
-            return;
-        }
-
-        if (readOnlyClientIds.contains(clientId)) {
-            reject(clientId, inputRequest.getSimulationId(), "input rejected: read-only session");
             return;
         }
 
@@ -271,13 +266,26 @@ public final class ServerApplication {
                 + ": " + message);
     }
 
-    private Session requireSession(ClientId clientId) {
-        Session session = sessionsByClientId.get(Objects.requireNonNull(clientId, "clientId"));
-        if (session == null) {
-            throw new IllegalStateException("Expected active session for " + clientId);
+    private Session findAnySession() {
+        for (Session session : sessionsByClientId.values()) {
+            return session;
         }
 
-        return session;
+        return null;
+    }
+
+    private Simulation resolveRequestedSimulation(SimulationId requestedSimulationId) {
+        SimulationId validatedSimulationId = Objects.requireNonNull(requestedSimulationId, "requestedSimulationId");
+        if (!SimulationIds.RANDOM.equals(validatedSimulationId)) {
+            return registry.getOrNull(validatedSimulationId);
+        }
+
+        List<Simulation> simulations = registry.all();
+        if (simulations.isEmpty()) {
+            return null;
+        }
+
+        return simulations.get(ThreadLocalRandom.current().nextInt(simulations.size()));
     }
 
     private static SimulationAugmentation toAugmentation(CustomUserInput userInput) {

@@ -7,6 +7,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.factoryonline.simulation.NamedThreadFactory;
@@ -19,6 +20,7 @@ public final class BatchedSimulationRunner {
     private final List<SimulationBatch> batches;
     private final ExecutorService executorService;
     private final AtomicInteger nextBatchIndex = new AtomicInteger(0);
+    private final AtomicBoolean snapshotRequested = new AtomicBoolean(false);
     private final String runtimeOwner;
 
     public BatchedSimulationRunner() {
@@ -46,14 +48,19 @@ public final class BatchedSimulationRunner {
         batches.get(batchIndex).addSimulation(simulation);
     }
 
+    public void requestSnapshot() {
+        snapshotRequested.set(true);
+    }
+
     public void runTick(int tick) {
         if (tick <= 0) {
             throw new IllegalArgumentException("tick must be positive");
         }
 
+        boolean logThisTick = snapshotRequested.compareAndSet(true, false);
         List<Future<?>> futures = new ArrayList<>(batches.size());
         for (SimulationBatch batch : batches) {
-            futures.add(executorService.submit(new SimulationAction(batch, tick, runtimeOwner)));
+            futures.add(executorService.submit(new SimulationAction(batch, tick, runtimeOwner, logThisTick)));
         }
 
         for (var future : futures) {

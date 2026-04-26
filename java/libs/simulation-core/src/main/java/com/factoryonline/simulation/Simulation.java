@@ -43,16 +43,18 @@ public final class Simulation {
         return id.value();
     }
 
-    public void run(int updateTick) {
+    public void run(int updateTick, boolean logThisTick) {
         state.advance();
 
         try {
             Thread.sleep(5L);
-            System.out.println(
-                INDENT + ANSI_CYAN + "[Thread]" + ANSI_RESET + " " + Thread.currentThread().getName()
-                    + " " + TERMINAL_UI_STATE.formatSimulationThreadTag(id)
-                    + " ran on [tick: " + updateTick + "] [value: " + state.getValue()
-                    + "] [direction: " + state.getDirection() + "]");
+            if (logThisTick) {
+                System.out.println(
+                    INDENT + ANSI_CYAN + "[Thread]" + ANSI_RESET + " " + Thread.currentThread().getName()
+                        + " " + TERMINAL_UI_STATE.formatSimulationThreadTag(id)
+                        + " ran on [tick: " + updateTick + "] [value: " + state.getValue()
+                        + "] [direction: " + state.getDirection() + "]");
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }

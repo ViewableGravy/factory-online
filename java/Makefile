@@ -5,11 +5,15 @@ BUILD_DIR := build/classes
 SRC_DIRS := apps libs
 JAVA_SOURCES := $(shell find $(SRC_DIRS) -path '*/src/main/java/*' -name '*.java')
 SERVER_MAIN := com.factoryonline.server.Main
+CLIENT_MAIN := com.factoryonline.client.Main
 
-.PHONY: run build clean verify-delay
+.PHONY: run run-client build clean verify-delay
 
 run: build
 	$(JAVA) -cp $(BUILD_DIR) $(SERVER_MAIN)
+
+run-client: build
+	$(JAVA) -cp $(BUILD_DIR) $(CLIENT_MAIN)
 
 build:
 	@mkdir -p $(BUILD_DIR)

@@ -73,7 +73,12 @@ public final class TerminalUiState {
 
     public synchronized String formatClient(ClientId clientId) {
         ClientId validatedClientId = Objects.requireNonNull(clientId, "clientId");
-        return colorize(validatedClientId.value(), requireDisplay(validatedClientId).color);
+        ClientDisplay display = displaysByClientId.get(validatedClientId);
+        if (display == null) {
+            return colorize(validatedClientId.value(), ANSI_DEFAULT_SIMULATION);
+        }
+
+        return colorize(validatedClientId.value(), display.color);
     }
 
     public synchronized String formatSimulation(SimulationId simulationId) {

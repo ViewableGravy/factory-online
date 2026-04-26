@@ -1,6 +1,5 @@
 package com.factoryonline.client.bootstrap;
 
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -9,6 +8,7 @@ import java.util.Set;
 
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
+import com.factoryonline.foundation.ids.SimulationIds;
 import com.factoryonline.foundation.protocol.AckMessage;
 import com.factoryonline.foundation.protocol.AckMessageDTO;
 import com.factoryonline.foundation.protocol.InitialSimulationState;
@@ -33,6 +33,7 @@ import com.factoryonline.transport.ClientTransport;
 public final class ClientApplication {
     // The long-term target is 100-200ms of extra client delay on top of observed network delay.
     // The manual harness still works in whole ticks, so the current value of 4 is that local safety buffer.
+    private static final String SNAPSHOT_COMMAND = "/snapshot";
     private static final int CLIENT_TARGET_LOCAL_BUFFER_TICKS = 4;
     private static final int CLIENT_LAG_TOLERANCE_TICKS = 2;
     private static final int CLIENT_CATCH_UP_TICKS = 2;
@@ -51,6 +52,7 @@ public final class ClientApplication {
     private int pendingSimulationSteps;
     private int remainingStartupBufferTicks;
     private boolean joinRequested;
+    private SimulationId joinedSimulationId;
 
     public ClientApplication(ClientId clientId, SimulationId requestedSimulationId, ClientTransport transport) {
         this.clientId = Objects.requireNonNull(clientId, "clientId");
@@ -67,12 +69,7 @@ public final class ClientApplication {
         joinRequested = true;
         System.out.println(
             "Client " + TERMINAL_UI_STATE.formatClient(clientId)
-                + " requested join for " + TERMINAL_UI_STATE.formatSimulation(requestedSimulationId));
-    }
-
-    public static void run(String[] args) throws IOException {
-        System.out.println("Factory Online client scaffold");
-        System.out.println("Use the shared transport harness to connect this client to a server endpoint.");
+                + " requested join for " + formatRequestedSimulation());
     }
 
     public void processIncomingMessages() {
@@ -116,16 +113,33 @@ public final class ClientApplication {
     public void handleInput(CustomUserInput userInput) {
         Objects.requireNonNull(userInput, "userInput");
 
+        if (SNAPSHOT_COMMAND.equalsIgnoreCase(userInput.getRaw().strip())) {
+            if (runner == null) {
+                System.out.println(
+                    "Client " + TERMINAL_UI_STATE.formatClient(clientId) + " is still waiting for an initial snapshot");
+                return;
+            }
+
+            runner.requestSnapshot();
+            return;
+        }
+
         SimulationAugmentation augmentation = toAugmentation(userInput);
         if (augmentation == null) {
             return;
         }
 
-        transport.send(new SimulationInputRequestDTO(requestedSimulationId, augmentation), true);
+        SimulationId simulationId = joinedSimulationId;
+        if (simulationId == null) {
+            System.out.println("Client " + TERMINAL_UI_STATE.formatClient(clientId) + " is still waiting for an initial snapshot");
+            return;
+        }
+
+        transport.send(new SimulationInputRequestDTO(simulationId, augmentation), true);
 
         System.out.println(
             "Client " + TERMINAL_UI_STATE.formatClient(clientId)
-                + " sent input request for " + TERMINAL_UI_STATE.formatSimulation(requestedSimulationId)
+                + " sent input request for " + TERMINAL_UI_STATE.formatSimulation(simulationId)
                 + " on transport tick " + transport.getCurrentTick());
     }
 
@@ -234,6 +248,7 @@ public final class ClientApplication {
         Simulation bufferedSimulation = new Simulation(initialState.getSimulationId(), initialState.getSnapshot());
         simulationRegistry.register(bufferedSimulation);
         attachedSimulationIds.add(initialState.getSimulationId());
+        joinedSimulationId = initialState.getSimulationId();
         runner.addSimulation(bufferedSimulation);
 
         System.out.println(
@@ -244,7 +259,12 @@ public final class ClientApplication {
     }
 
     private int determineSimulationSteps() {
-        TickSyncState tickSyncState = tickSyncStatesBySimulation.get(requestedSimulationId);
+        SimulationId activeSimulationId = joinedSimulationId;
+        if (activeSimulationId == null) {
+            return 1;
+        }
+
+        TickSyncState tickSyncState = tickSyncStatesBySimulation.get(activeSimulationId);
         if (tickSyncState == null) {
             return 1;
         }
@@ -262,6 +282,14 @@ public final class ClientApplication {
         }
 
         return 1;
+    }
+
+    private String formatRequestedSimulation() {
+        if (SimulationIds.RANDOM.equals(requestedSimulationId)) {
+            return "a random server simulation";
+        }
+
+        return TERMINAL_UI_STATE.formatSimulation(requestedSimulationId);
     }
 
     private static SimulationAugmentation toAugmentation(CustomUserInput userInput) {

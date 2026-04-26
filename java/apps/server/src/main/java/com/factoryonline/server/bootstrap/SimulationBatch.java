@@ -16,7 +16,7 @@ final class SimulationBatch {
         return simulations.size();
     }
 
-    void run(int updateTick) {
+    void run(int updateTick, boolean logThisTick) {
         List<Simulation> currentSimulations;
         synchronized (this) {
             currentSimulations = List.copyOf(simulations);
@@ -26,7 +26,7 @@ final class SimulationBatch {
             if (Thread.currentThread().isInterrupted())
                 break;
 
-            simulation.run(updateTick);
+            simulation.run(updateTick, logThisTick);
         }
     }
 }

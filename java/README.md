@@ -2,12 +2,10 @@
 
 This directory is the active implementation target for the project runtime.
 
-The current runnable application matches the existing bootstrap behavior in this repository:
+The current proof-of-concept runs as split processes:
 
-- prints `Hello, world!`,
-- prompts for console input,
-- echoes each entered line until standard input closes.
-- keeps networking as documented requirements only for now.
+- `run-server.sh` starts a single server that owns the simulations and accepts client connections.
+- `run-client.sh` starts a client that connects over TCP and subscribes to a random server simulation.
 
 ## Layout
 
@@ -26,10 +24,9 @@ java/
     simulation-core/
   build/
   Makefile
+  run-client.sh
   run-server.sh
 ```
-
-Networking is intentionally not implemented in code yet. The requirements and future layout are documented in the vault note referenced from [documentation/networking.md](/home/gravy/programming/games/factory-online/documentation/networking.md).
 
 ## Requirements
 
@@ -44,12 +41,24 @@ From `java/`:
 ./run-server.sh
 ```
 
+In another terminal:
+
+```bash
+./run-client.sh
+```
+
 Pass `-v` to show the underlying build and run commands before the application starts.
 
 Or explicitly:
 
 ```bash
 make run
+```
+
+and:
+
+```bash
+make run-client
 ```
 
 ## Build

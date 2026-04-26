@@ -8,6 +8,7 @@ import java.util.Objects;
 
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
+import com.factoryonline.foundation.protocol.ProtocolDTO;
 import com.factoryonline.foundation.protocol.SimulationUpdateDTO;
 import com.factoryonline.foundation.protocol.TickSyncMessageDTO;
 import com.factoryonline.simulation.SimulationAugmentation;
@@ -37,26 +38,48 @@ public final class Broadcaster {
         SimulationId validatedSimulationId = Objects.requireNonNull(simulationId, "simulationId");
         Objects.requireNonNull(augmentation, "augmentation");
 
-        List<ClientId> subscribers = subscribersBySimulation.get(validatedSimulationId);
-        if (subscribers == null) {
-            return;
-        }
-
-        for (ClientId clientId : List.copyOf(subscribers)) {
-            transport.send(clientId, new SimulationUpdateDTO(validatedSimulationId, augmentation, tick));
-        }
+        sendToSubscribers(validatedSimulationId, new SimulationUpdateDTO(validatedSimulationId, augmentation, tick));
     }
 
     public void broadcastTickSync(SimulationId simulationId, int serverTick) {
         SimulationId validatedSimulationId = Objects.requireNonNull(simulationId, "simulationId");
 
+        sendToSubscribers(validatedSimulationId, new TickSyncMessageDTO(validatedSimulationId, serverTick));
+    }
+
+    private void sendToSubscribers(SimulationId simulationId, ProtocolDTO<?> payload) {
+        SimulationId validatedSimulationId = Objects.requireNonNull(simulationId, "simulationId");
+        ProtocolDTO<?> validatedPayload = Objects.requireNonNull(payload, "payload");
+
         List<ClientId> subscribers = subscribersBySimulation.get(validatedSimulationId);
         if (subscribers == null) {
             return;
         }
 
         for (ClientId clientId : List.copyOf(subscribers)) {
-            transport.send(clientId, new TickSyncMessageDTO(validatedSimulationId, serverTick));
+            try {
+                transport.send(clientId, validatedPayload);
+            } catch (IllegalArgumentException | IllegalStateException exception) {
+                unsubscribe(validatedSimulationId, clientId);
+                System.out.println(
+                    "Server removed disconnected subscriber " + clientId.value()
+                        + " from " + validatedSimulationId.value());
+            }
+        }
+    }
+
+    private void unsubscribe(SimulationId simulationId, ClientId clientId) {
+        SimulationId validatedSimulationId = Objects.requireNonNull(simulationId, "simulationId");
+        ClientId validatedClientId = Objects.requireNonNull(clientId, "clientId");
+
+        List<ClientId> subscribers = subscribersBySimulation.get(validatedSimulationId);
+        if (subscribers == null) {
+            return;
+        }
+
+        subscribers.remove(validatedClientId);
+        if (subscribers.isEmpty()) {
+            subscribersBySimulation.remove(validatedSimulationId);
         }
     }
 }
