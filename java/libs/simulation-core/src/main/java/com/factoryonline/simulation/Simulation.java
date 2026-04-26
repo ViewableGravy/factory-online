@@ -64,6 +64,10 @@ public final class Simulation {
         return state.snapshot();
     }
 
+    public int checksum() {
+        return state.getValue();
+    }
+
     public SimulationActionResult applyAction(SimulationAugmentation augmentation) {
         Objects.requireNonNull(augmentation, "augmentation");
 

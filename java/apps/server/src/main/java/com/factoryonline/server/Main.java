@@ -3,8 +3,10 @@ package com.factoryonline.server;
 import java.io.IOException;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import com.factoryonline.foundation.timing.TickDeadline;
 import com.factoryonline.server.bootstrap.CustomBufferedReader;
 import com.factoryonline.server.bootstrap.CustomUserInput;
 import com.factoryonline.server.bootstrap.ServerApplication;
@@ -14,6 +16,7 @@ import com.factoryonline.transport.tcp.TcpServerTransport;
 public final class Main {
     private static final int DEFAULT_PORT = 9999;
     private static final int TICK_INTERVAL_MILLIS = 100;
+    private static final long TICK_INTERVAL_NANOS = TimeUnit.MILLISECONDS.toNanos(TICK_INTERVAL_MILLIS);
     private static final String SERVER_COMMAND_PREFIX = "/server";
 
     private static final AtomicBoolean promptRequested = new AtomicBoolean(false);
@@ -82,13 +85,14 @@ public final class Main {
         AtomicBoolean running
     ) {
         Thread tickThread = new Thread(() -> {
+            TickDeadline tickDeadline = new TickDeadline(TICK_INTERVAL_NANOS);
             while (running.get()) {
                 server.advanceTick();
                 drainCommands(server, queuedCommands);
                 server.processIncomingMessages();
                 server.simulateCurrentTick();
                 printPromptIfRequested(promptRequested, running);
-                sleepTickInterval();
+                tickDeadline.sleepUntilNextTick();
             }
         }, "split-server-loop");
         tickThread.setDaemon(true);
@@ -138,14 +142,6 @@ public final class Main {
         thread.interrupt();
         try {
             thread.join();
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-        }
-    }
-
-    private static void sleepTickInterval() {
-        try {
-            Thread.sleep(TICK_INTERVAL_MILLIS);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
         }

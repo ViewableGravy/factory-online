@@ -41,10 +41,10 @@ public final class Broadcaster {
         sendToSubscribers(validatedSimulationId, new SimulationUpdateDTO(validatedSimulationId, augmentation, tick));
     }
 
-    public void broadcastTickSync(SimulationId simulationId, int serverTick) {
+    public void broadcastTickSync(SimulationId simulationId, int serverTick, int serverChecksum) {
         SimulationId validatedSimulationId = Objects.requireNonNull(simulationId, "simulationId");
 
-        sendToSubscribers(validatedSimulationId, new TickSyncMessageDTO(validatedSimulationId, serverTick));
+        sendToSubscribers(validatedSimulationId, new TickSyncMessageDTO(validatedSimulationId, serverTick, serverChecksum));
     }
 
     private void sendToSubscribers(SimulationId simulationId, ProtocolDTO<?> payload) {

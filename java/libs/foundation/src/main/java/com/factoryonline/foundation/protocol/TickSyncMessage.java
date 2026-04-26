@@ -7,14 +7,16 @@ import com.factoryonline.foundation.ids.SimulationId;
 public final class TickSyncMessage {
     private final SimulationId simulationId;
     private final int serverTick;
+    private final int serverChecksum;
 
-    public TickSyncMessage(SimulationId simulationId, int serverTick) {
+    public TickSyncMessage(SimulationId simulationId, int serverTick, int serverChecksum) {
         this.simulationId = Objects.requireNonNull(simulationId, "simulationId");
         if (serverTick < 0) {
             throw new IllegalArgumentException("serverTick must not be negative");
         }
 
         this.serverTick = serverTick;
+        this.serverChecksum = serverChecksum;
     }
 
     public SimulationId getSimulationId() {
@@ -23,5 +25,9 @@ public final class TickSyncMessage {
 
     public int getServerTick() {
         return serverTick;
+    }
+
+    public int getServerChecksum() {
+        return serverChecksum;
     }
 }

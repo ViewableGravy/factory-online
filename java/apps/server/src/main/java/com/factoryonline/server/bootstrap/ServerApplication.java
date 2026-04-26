@@ -29,7 +29,7 @@ import com.factoryonline.transport.ServerTransport;
 public final class ServerApplication {
     private static final String ADD_SIMULATION_COMMAND = "/add-simulation";
     private static final String SNAPSHOT_COMMAND = "/snapshot";
-    private static final int TICK_SYNC_INTERVAL = 500;
+    private static final int TICK_SYNC_INTERVAL = 2;
     private static final TerminalUiState TERMINAL_UI_STATE = TerminalUiState.getInstance();
 
     private final ServerTransport transport;
@@ -77,7 +77,10 @@ public final class ServerApplication {
         runner.runTick(pendingSimulationTick);
         if (pendingSimulationTick % TICK_SYNC_INTERVAL == 0) {
             for (Simulation simulation : registry.all()) {
-                broadcaster.broadcastTickSync(simulation.getId(), pendingSimulationTick);
+                broadcaster.broadcastTickSync(
+                    simulation.getId(),
+                    pendingSimulationTick,
+                    simulation.checksum());
             }
         }
         pendingSimulationTick = -1;
@@ -181,7 +184,8 @@ public final class ServerApplication {
         sessionsByClientId.put(clientId, session);
 
         broadcaster.subscribe(simulationId, clientId);
-        transport.send(clientId, new InitialSimulationStateDTO(simulationId, simulation.snapshot(), ticker.getTick()));
+        int snapshotTick = currentSnapshotTick();
+        transport.send(clientId, new InitialSimulationStateDTO(simulationId, simulation.snapshot(), snapshotTick));
         transport.send(clientId, new AckMessageDTO(simulationId, ticker.getTick(), "join accepted"));
 
         System.out.println(
@@ -298,6 +302,14 @@ public final class ServerApplication {
         }
 
         return null;
+    }
+
+    private int currentSnapshotTick() {
+        if (pendingSimulationTick > 0) {
+            return pendingSimulationTick - 1;
+        }
+
+        return ticker.getTick();
     }
 
     private void registerSimulation(Simulation simulation) {

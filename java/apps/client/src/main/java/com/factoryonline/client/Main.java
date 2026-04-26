@@ -4,11 +4,13 @@ import java.io.IOException;
 import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.factoryonline.client.bootstrap.ClientApplication;
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationIds;
+import com.factoryonline.foundation.timing.TickDeadline;
 import com.factoryonline.server.bootstrap.CustomBufferedReader;
 import com.factoryonline.server.bootstrap.CustomUserInput;
 import com.factoryonline.server.bootstrap.TerminalUiState;
@@ -18,6 +20,7 @@ public final class Main {
     private static final String DEFAULT_HOST = "127.0.0.1";
     private static final int DEFAULT_PORT = 9999;
     private static final int TICK_INTERVAL_MILLIS = 100;
+    private static final long TICK_INTERVAL_NANOS = TimeUnit.MILLISECONDS.toNanos(TICK_INTERVAL_MILLIS);
 
     public static final ClientId clientId = new ClientId("client-" + UUID.randomUUID().toString().substring(0, 8));
     public static final Queue<CustomUserInput> queuedInputs = new ConcurrentLinkedQueue<>();
@@ -66,6 +69,7 @@ public final class Main {
 
     private static Thread createTickThread(ClientApplication client, TcpClientTransport transport) {
         Thread tickThread = new Thread(() -> {
+            TickDeadline tickDeadline = new TickDeadline(TICK_INTERVAL_NANOS);
             while (running.get()) {
                 client.advanceTick();
                 transport.advanceTick();
@@ -80,12 +84,8 @@ public final class Main {
                 client.simulateCurrentTick();
 
                 printPromptIfRequested();
-                
-                try {
-                    Thread.sleep(TICK_INTERVAL_MILLIS);
-                } catch (InterruptedException exception) {
-                    Thread.currentThread().interrupt();
-                }
+
+                tickDeadline.sleepUntilNextTick();
             }
         }, "split-client-loop");
 
