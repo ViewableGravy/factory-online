@@ -5,6 +5,10 @@ import java.util.Objects;
 
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
+import com.factoryonline.foundation.protocol.InitialSimulationState;
+import com.factoryonline.foundation.protocol.JoinSimulationRequest;
+import com.factoryonline.foundation.protocol.SimulationInputRequest;
+import com.factoryonline.foundation.protocol.SimulationUpdate;
 import com.factoryonline.simulation.SimulationAugmentation;
 import com.factoryonline.simulation.SimulationSnapshot;
 

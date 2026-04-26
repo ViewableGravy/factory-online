@@ -1,4 +1,4 @@
-package com.factoryonline.transport.local;
+package com.factoryonline.foundation.protocol;
 
 import java.util.Objects;
 

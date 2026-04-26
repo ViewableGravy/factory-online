@@ -9,15 +9,15 @@ import java.util.Set;
 
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
+import com.factoryonline.foundation.protocol.InitialSimulationState;
+import com.factoryonline.foundation.protocol.SimulationUpdate;
 import com.factoryonline.server.bootstrap.BatchedSimulationRunner;
 import com.factoryonline.server.bootstrap.CustomUserInput;
 import com.factoryonline.server.bootstrap.Ticker;
 import com.factoryonline.simulation.Simulation;
 import com.factoryonline.simulation.SimulationAugmentation;
 import com.factoryonline.simulation.SimulationRegistry;
-import com.factoryonline.transport.local.InitialSimulationState;
 import com.factoryonline.transport.local.LocalClientTransport;
-import com.factoryonline.transport.local.SimulationUpdate;
 
 public final class ClientApplication {
     private static final int CLIENT_STARTUP_BUFFER_TICKS = 4;

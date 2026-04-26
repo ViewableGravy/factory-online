@@ -8,6 +8,10 @@ import java.util.Map;
 import java.util.Objects;
 
 import com.factoryonline.foundation.ids.ClientId;
+import com.factoryonline.foundation.protocol.InitialSimulationState;
+import com.factoryonline.foundation.protocol.JoinSimulationRequest;
+import com.factoryonline.foundation.protocol.SimulationInputRequest;
+import com.factoryonline.foundation.protocol.SimulationUpdate;
 
 public final class LocalTransportHub {
     private final int transportDelayTicks;

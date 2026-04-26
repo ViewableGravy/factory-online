@@ -6,12 +6,12 @@ import java.util.Objects;
 
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
+import com.factoryonline.foundation.protocol.JoinSimulationRequest;
+import com.factoryonline.foundation.protocol.SimulationInputRequest;
 import com.factoryonline.simulation.Simulation;
 import com.factoryonline.simulation.SimulationActionResult;
 import com.factoryonline.simulation.SimulationRegistry;
-import com.factoryonline.transport.local.JoinSimulationRequest;
 import com.factoryonline.transport.local.LocalServerTransport;
-import com.factoryonline.transport.local.SimulationInputRequest;
 
 public final class ServerApplication {
     private static final String ADD_SIMULATION_COMMAND = "/add-simulation";
