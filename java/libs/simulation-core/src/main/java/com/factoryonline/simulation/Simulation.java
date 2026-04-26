@@ -3,11 +3,13 @@ package com.factoryonline.simulation;
 import java.util.Objects;
 
 import com.factoryonline.foundation.ids.SimulationId;
+import com.factoryonline.server.bootstrap.TerminalUiState;
 
 public final class Simulation {
     private static final String INDENT = "    ";
     private static final String ANSI_CYAN = "\u001B[36m";
     private static final String ANSI_RESET = "\u001B[0m";
+    private static final TerminalUiState TERMINAL_UI_STATE = TerminalUiState.getInstance();
 
     private final SimulationId id;
     private final SimulationState state;
@@ -48,7 +50,8 @@ public final class Simulation {
             Thread.sleep(5L);
             System.out.println(
                 INDENT + ANSI_CYAN + "[Thread]" + ANSI_RESET + " " + Thread.currentThread().getName()
-                    + " [name: " + id + "] ran on [tick: " + updateTick + "] [value: " + state.getValue()
+                    + " " + TERMINAL_UI_STATE.formatSimulationThreadTag(id)
+                    + " ran on [tick: " + updateTick + "] [value: " + state.getValue()
                     + "] [direction: " + state.getDirection() + "]");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

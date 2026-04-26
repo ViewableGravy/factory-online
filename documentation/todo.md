@@ -7,17 +7,11 @@ The following TODOs are scoped for an initial proof-of-concept split where we ke
 1. Define `Transport` abstraction
    - Add a `Transport` interface that decouples in-process (`LocalTransportHub`) from network transports (TCP/UDP/WebSocket). Keep APIs for send/receive, lifecycle (connect/close), and per-client addressing.
 
-2. Implement serialization layer
-   - Choose and implement a stable serializer (e.g., Protobuf or compact JSON). Ensure deterministic encoding for snapshots and commands.
-
 3. Define message framing & channels
    - Design framing for stream transports and logical channels (control, reliable, best-effort). Identify message boundaries and sizes.
 
 4. Implement sequencing & ACK tracking
    - Add sequence numbers and optional ACK/receipt tracking for critical messages to enforce ordering where needed.
-
-5. Support multiple clients
-   - Server must accept and manage multiple simultaneous clients; track `ClientId` and route messages per-client.
 
 6. Add session management
    - Implement `Session` objects mapping network connections to in-game player entities. Handle connect/start/stop lifecycle (explicit reconnect/resume is out of scope).

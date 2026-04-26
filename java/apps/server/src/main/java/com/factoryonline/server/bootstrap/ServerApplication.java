@@ -17,14 +17,14 @@ import com.factoryonline.transport.local.LocalServerTransport;
 
 public final class ServerApplication {
     private static final String ADD_SIMULATION_COMMAND = "/add-simulation";
-    private static final String SIMULATION_NAME_PREFIX = "Simulation ";
-    private static final SimulationId PRIMARY_SIMULATION_ID = new SimulationId("Simulation 1");
+    private static final TerminalUiState TERMINAL_UI_STATE = TerminalUiState.getInstance();
 
     private final LocalServerTransport transport;
     private final Ticker ticker;
     private final BatchedSimulationRunner runner;
     private final SimulationRegistry registry;
     private final Broadcaster broadcaster;
+    private final SimulationIdFactory simulationIdFactory;
     private final Map<ClientId, SimulationId> simulationIdsByClientId = new HashMap<>();
     private int pendingSimulationTick = -1;
 
@@ -35,12 +35,13 @@ public final class ServerApplication {
         this.runner = new BatchedSimulationRunner(2, "server");
         this.registry = new SimulationRegistry();
         this.broadcaster = new Broadcaster(transport);
+        this.simulationIdFactory = new SimulationIdFactory();
     }
 
     public void setup() {
-        registerSimulation(new Simulation(PRIMARY_SIMULATION_ID));
-        registerSimulation(new Simulation(new SimulationId("Simulation 2")));
-        registerSimulation(new Simulation(new SimulationId("Simulation 3")));
+        registerSimulation(new Simulation(simulationIdFactory.create()));
+        registerSimulation(new Simulation(simulationIdFactory.create()));
+        registerSimulation(new Simulation(simulationIdFactory.create()));
     }
 
     public void processIncomingMessages() {
@@ -73,23 +74,30 @@ public final class ServerApplication {
             return;
         }
 
-        Simulation simulation = new Simulation(createNextSimulationId());
+        Simulation simulation = new Simulation(simulationIdFactory.create());
         registerSimulation(simulation);
-        System.out.println("Server added simulation " + simulation.getId() + " in base state");
+        System.out.println(
+            TERMINAL_UI_STATE.formatServerLabel()
+                + " added simulation " + TERMINAL_UI_STATE.formatSimulation(simulation.getId()) + " in base state");
     }
 
     private void handleJoinRequests() {
         for (JoinSimulationRequest joinRequest : transport.drainAs(JoinSimulationRequestDTO.class)) {
             ClientId clientId = joinRequest.getClientId();
             if (simulationIdsByClientId.containsKey(clientId)) {
-                System.out.println("Server ignored duplicate join from " + clientId);
+                System.out.println(
+                    TERMINAL_UI_STATE.formatServerLabel()
+                        + " ignored duplicate join from " + TERMINAL_UI_STATE.formatClient(clientId));
                 continue;
             }
 
             SimulationId simulationId = joinRequest.getSimulationId();
             Simulation simulation = registry.getOrNull(simulationId);
             if (simulation == null) {
-                System.out.println("Server rejected join from " + clientId + ": " + simulationId + " not found");
+                System.out.println(
+                    TERMINAL_UI_STATE.formatServerLabel()
+                        + " rejected join from " + TERMINAL_UI_STATE.formatClient(clientId)
+                        + ": " + TERMINAL_UI_STATE.formatSimulation(simulationId) + " not found");
                 continue;
             }
 
@@ -98,8 +106,8 @@ public final class ServerApplication {
             transport.sendInitialState(clientId, simulationId, simulation.snapshot(), ticker.getTick());
             
             System.out.println(
-                "Server accepted join from " + clientId
-                    + " for " + simulationId
+                TERMINAL_UI_STATE.formatServerLabel() + " accepted join from " + TERMINAL_UI_STATE.formatClient(clientId)
+                    + " for " + TERMINAL_UI_STATE.formatSimulation(simulationId)
                     + " at current server tick " + ticker.getTick());
         }
     }
@@ -117,26 +125,14 @@ public final class ServerApplication {
             broadcaster.broadcast(inputRequest.getSimulationId(), targetTick, inputRequest.getAugmentation());
 
             System.out.println(
-                "Server applied input from " + inputRequest.getClientId()
+                TERMINAL_UI_STATE.formatServerLabel() + " applied input from " + TERMINAL_UI_STATE.formatClient(inputRequest.getClientId())
                     + " for tick " + targetTick
-                    + " on " + simulation.getId());
+                    + " on " + TERMINAL_UI_STATE.formatSimulation(simulation.getId()));
         }
     }
 
     private void registerSimulation(Simulation simulation) {
         registry.register(simulation);
         runner.addSimulation(simulation);
-    }
-
-    private SimulationId createNextSimulationId() {
-        int simulationNumber = registry.all().size() + 1;
-        SimulationId candidateId = new SimulationId(SIMULATION_NAME_PREFIX + simulationNumber);
-
-        while (registry.getOrNull(candidateId) != null) {
-            simulationNumber += 1;
-            candidateId = new SimulationId(SIMULATION_NAME_PREFIX + simulationNumber);
-        }
-
-        return candidateId;
     }
 }

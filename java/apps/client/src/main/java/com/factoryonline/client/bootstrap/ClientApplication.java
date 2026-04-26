@@ -15,6 +15,7 @@ import com.factoryonline.foundation.protocol.SimulationUpdate;
 import com.factoryonline.foundation.protocol.SimulationUpdateDTO;
 import com.factoryonline.server.bootstrap.BatchedSimulationRunner;
 import com.factoryonline.server.bootstrap.CustomUserInput;
+import com.factoryonline.server.bootstrap.TerminalUiState;
 import com.factoryonline.server.bootstrap.Ticker;
 import com.factoryonline.simulation.Simulation;
 import com.factoryonline.simulation.SimulationAugmentation;
@@ -23,6 +24,7 @@ import com.factoryonline.transport.local.LocalClientTransport;
 
 public final class ClientApplication {
     private static final int CLIENT_STARTUP_BUFFER_TICKS = 4;
+    private static final TerminalUiState TERMINAL_UI_STATE = TerminalUiState.getInstance();
 
     private final ClientId clientId;
     private final SimulationId requestedSimulationId;
@@ -49,7 +51,9 @@ public final class ClientApplication {
 
         transport.requestJoin(requestedSimulationId);
         joinRequested = true;
-        System.out.println("Client " + clientId + " requested join for " + requestedSimulationId);
+        System.out.println(
+            "Client " + TERMINAL_UI_STATE.formatClient(clientId)
+                + " requested join for " + TERMINAL_UI_STATE.formatSimulation(requestedSimulationId));
     }
 
     public static void run(String[] args) throws IOException {
@@ -92,8 +96,8 @@ public final class ClientApplication {
         transport.sendSimulationInput(requestedSimulationId, augmentation);
 
         System.out.println(
-            "Client " + clientId
-                + " sent input request for " + requestedSimulationId
+            "Client " + TERMINAL_UI_STATE.formatClient(clientId)
+                + " sent input request for " + TERMINAL_UI_STATE.formatSimulation(requestedSimulationId)
                 + " on transport tick " + transport.getCurrentTick());
     }
 
@@ -145,9 +149,9 @@ public final class ClientApplication {
                 .computeIfAbsent(simulationUpdate.getSimulationId(), ignored -> new HashMap<>())
                 .put(simulationUpdate.getTick(), simulationUpdate.getAugmentation());
             System.out.println(
-                "Client " + clientId
+                "Client " + TERMINAL_UI_STATE.formatClient(clientId)
                     + " queued update for tick " + simulationUpdate.getTick()
-                    + " on " + simulationUpdate.getSimulationId());
+                    + " on " + TERMINAL_UI_STATE.formatSimulation(simulationUpdate.getSimulationId()));
         }
     }
 
@@ -168,8 +172,8 @@ public final class ClientApplication {
         runner.addSimulation(bufferedSimulation);
 
         System.out.println(
-            "Client " + clientId
-                + " attached " + bufferedSimulation.getId()
+            "Client " + TERMINAL_UI_STATE.formatClient(clientId)
+                + " attached " + TERMINAL_UI_STATE.formatSimulation(bufferedSimulation.getId())
                 + " at snapshot tick " + initialState.getTick()
                 + " with startup buffer " + CLIENT_STARTUP_BUFFER_TICKS);
     }
