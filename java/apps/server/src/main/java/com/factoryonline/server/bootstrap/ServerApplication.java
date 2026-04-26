@@ -2,42 +2,49 @@ package com.factoryonline.server.bootstrap;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
+import com.factoryonline.foundation.protocol.AckMessageDTO;
 import com.factoryonline.foundation.protocol.ClientTransportMessage;
+import com.factoryonline.foundation.protocol.InitialSimulationStateDTO;
 import com.factoryonline.foundation.protocol.JoinSimulationRequest;
 import com.factoryonline.foundation.protocol.JoinSimulationRequestDTO;
 import com.factoryonline.foundation.protocol.ProtocolDTO;
 import com.factoryonline.foundation.protocol.ProtocolDTOContainer;
+import com.factoryonline.foundation.protocol.RejectionMessageDTO;
 import com.factoryonline.foundation.protocol.SimulationInputRequest;
 import com.factoryonline.foundation.protocol.SimulationInputRequestDTO;
 import com.factoryonline.simulation.Simulation;
 import com.factoryonline.simulation.SimulationActionResult;
 import com.factoryonline.simulation.SimulationAugmentation;
 import com.factoryonline.simulation.SimulationRegistry;
-import com.factoryonline.transport.local.LocalServerTransport;
+import com.factoryonline.transport.ServerTransport;
 
 public final class ServerApplication {
     private static final String ADD_SIMULATION_COMMAND = "/add-simulation";
     private static final ClientId ACCEPTED_CLIENT_ID = new ClientId("client-1");
+    private static final int TICK_SYNC_INTERVAL = 5;
     private static final TerminalUiState TERMINAL_UI_STATE = TerminalUiState.getInstance();
 
-    private final LocalServerTransport transport;
+    private final ServerTransport transport;
     private final Ticker ticker;
     private final BatchedSimulationRunner runner;
     private final SimulationRegistry registry;
     private final Broadcaster broadcaster;
     private final SimulationIdFactory simulationIdFactory;
     private final Map<ClientId, Session> sessionsByClientId = new HashMap<>();
+    private final Set<ClientId> readOnlyClientIds = new HashSet<>();
     private final Map<Integer, List<BufferedSimulationInput>> bufferedInputsByTick = new HashMap<>();
     private final Map<Integer, Map<SimulationId, Simulation>> validationSimulationsByTick = new HashMap<>();
     private int pendingSimulationTick = -1;
 
-    public ServerApplication(LocalServerTransport transport) {
+    public ServerApplication(ServerTransport transport) {
         this.transport = Objects.requireNonNull(transport, "transport");
 
         this.ticker = new Ticker();
@@ -54,7 +61,7 @@ public final class ServerApplication {
     }
 
     public void processIncomingMessages() {
-        for (ClientTransportMessage clientMessage : transport.drainClientMessages()) {
+        for (ClientTransportMessage clientMessage : transport.drainMessages()) {
             dispatchClientMessage(clientMessage);
         }
     }
@@ -69,6 +76,11 @@ public final class ServerApplication {
 
         applyBufferedInputs(pendingSimulationTick);
         runner.runTick(pendingSimulationTick);
+        if (pendingSimulationTick % TICK_SYNC_INTERVAL == 0) {
+            for (Simulation simulation : registry.all()) {
+                broadcaster.broadcastTickSync(simulation.getId(), pendingSimulationTick);
+            }
+        }
         pendingSimulationTick = -1;
     }
 
@@ -143,11 +155,6 @@ public final class ServerApplication {
         Objects.requireNonNull(clientId, "clientId");
         Objects.requireNonNull(joinRequest, "joinRequest");
 
-        if (!ACCEPTED_CLIENT_ID.equals(clientId)) {
-            reject(clientId, joinRequest.getSimulationId(), "join rejected: only client-1 sessions are enabled");
-            return;
-        }
-
         if (sessionsByClientId.containsKey(clientId)) {
             reject(clientId, joinRequest.getSimulationId(), "join rejected: duplicate session for client");
             return;
@@ -162,13 +169,24 @@ public final class ServerApplication {
 
         Session session = new Session(clientId, simulationId);
         sessionsByClientId.put(clientId, session);
+        boolean readOnlySession = !ACCEPTED_CLIENT_ID.equals(clientId);
+        if (readOnlySession) {
+            readOnlyClientIds.add(clientId);
+        }
+
         broadcaster.subscribe(simulationId, clientId);
-        transport.sendInitialState(clientId, simulationId, simulation.snapshot(), ticker.getTick());
-        transport.sendAck(clientId, simulationId, ticker.getTick(), "join accepted");
+        transport.send(clientId, new InitialSimulationStateDTO(simulationId, simulation.snapshot(), ticker.getTick()));
+        transport.send(
+            clientId,
+            new AckMessageDTO(
+                simulationId,
+                ticker.getTick(),
+                readOnlySession ? "join accepted (read-only)" : "join accepted"));
 
         System.out.println(
             TERMINAL_UI_STATE.formatServerLabel() + " accepted join from " + TERMINAL_UI_STATE.formatClient(clientId)
                 + " for " + TERMINAL_UI_STATE.formatSimulation(simulationId)
+                + (readOnlySession ? " as read-only" : "")
                 + " at current server tick " + ticker.getTick());
     }
 
@@ -179,6 +197,11 @@ public final class ServerApplication {
         Session session = sessionsByClientId.get(clientId);
         if (session == null) {
             reject(clientId, inputRequest.getSimulationId(), "input rejected: no active session");
+            return;
+        }
+
+        if (readOnlyClientIds.contains(clientId)) {
+            reject(clientId, inputRequest.getSimulationId(), "input rejected: read-only session");
             return;
         }
 
@@ -194,7 +217,7 @@ public final class ServerApplication {
             return;
         }
 
-        transport.sendAck(clientId, inputRequest.getSimulationId(), targetTick, "input accepted");
+        transport.send(clientId, new AckMessageDTO(inputRequest.getSimulationId(), targetTick, "input accepted"));
         broadcaster.broadcast(inputRequest.getSimulationId(), targetTick, inputRequest.getAugmentation());
         System.out.println(
             TERMINAL_UI_STATE.formatServerLabel() + " accepted input from " + TERMINAL_UI_STATE.formatClient(clientId)
@@ -242,7 +265,7 @@ public final class ServerApplication {
     }
 
     private void reject(ClientId clientId, SimulationId simulationId, String message) {
-        transport.sendRejection(clientId, simulationId, ticker.getTick(), message);
+        transport.send(clientId, new RejectionMessageDTO(simulationId, ticker.getTick(), message));
         System.out.println(
             TERMINAL_UI_STATE.formatServerLabel() + " rejected " + TERMINAL_UI_STATE.formatClient(clientId)
                 + ": " + message);

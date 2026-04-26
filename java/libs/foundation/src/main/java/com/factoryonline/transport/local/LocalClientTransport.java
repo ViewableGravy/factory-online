@@ -4,13 +4,11 @@ import java.util.List;
 import java.util.Objects;
 
 import com.factoryonline.foundation.ids.ClientId;
-import com.factoryonline.foundation.ids.SimulationId;
-import com.factoryonline.foundation.protocol.JoinSimulationRequestDTO;
 import com.factoryonline.foundation.protocol.ProtocolDTO;
-import com.factoryonline.foundation.protocol.SimulationInputRequestDTO;
-import com.factoryonline.simulation.SimulationAugmentation;
+import com.factoryonline.transport.ClientTransport;
+import com.factoryonline.transport.TransportMessage;
 
-public final class LocalClientTransport {
+public final class LocalClientTransport implements ClientTransport {
     private final LocalTransportHub transportHub;
     private final ClientId clientId;
 
@@ -23,12 +21,8 @@ public final class LocalClientTransport {
         return clientId;
     }
 
-    public void requestJoin(SimulationId simulationId) {
-        transportHub.sendToServer(clientId, new JoinSimulationRequestDTO(simulationId), false);
-    }
-
-    public void sendSimulationInput(SimulationId simulationId, SimulationAugmentation augmentation) {
-        transportHub.sendToServer(clientId, new SimulationInputRequestDTO(simulationId, augmentation), true);
+    public void send(TransportMessage message, boolean delayed) {
+        transportHub.sendToServer(clientId, message, delayed);
     }
 
     public int getCurrentTick() {

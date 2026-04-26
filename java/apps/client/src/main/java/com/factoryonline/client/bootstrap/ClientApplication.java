@@ -13,10 +13,14 @@ import com.factoryonline.foundation.protocol.AckMessage;
 import com.factoryonline.foundation.protocol.AckMessageDTO;
 import com.factoryonline.foundation.protocol.InitialSimulationState;
 import com.factoryonline.foundation.protocol.InitialSimulationStateDTO;
+import com.factoryonline.foundation.protocol.JoinSimulationRequestDTO;
 import com.factoryonline.foundation.protocol.RejectionMessage;
 import com.factoryonline.foundation.protocol.RejectionMessageDTO;
+import com.factoryonline.foundation.protocol.SimulationInputRequestDTO;
 import com.factoryonline.foundation.protocol.SimulationUpdate;
 import com.factoryonline.foundation.protocol.SimulationUpdateDTO;
+import com.factoryonline.foundation.protocol.TickSyncMessage;
+import com.factoryonline.foundation.protocol.TickSyncMessageDTO;
 import com.factoryonline.server.bootstrap.BatchedSimulationRunner;
 import com.factoryonline.server.bootstrap.CustomUserInput;
 import com.factoryonline.server.bootstrap.TerminalUiState;
@@ -24,25 +28,31 @@ import com.factoryonline.server.bootstrap.Ticker;
 import com.factoryonline.simulation.Simulation;
 import com.factoryonline.simulation.SimulationAugmentation;
 import com.factoryonline.simulation.SimulationRegistry;
-import com.factoryonline.transport.local.LocalClientTransport;
+import com.factoryonline.transport.ClientTransport;
 
 public final class ClientApplication {
-    private static final int CLIENT_STARTUP_BUFFER_TICKS = 4;
+    // The long-term target is 100-200ms of extra client delay on top of observed network delay.
+    // The manual harness still works in whole ticks, so the current value of 4 is that local safety buffer.
+    private static final int CLIENT_TARGET_LOCAL_BUFFER_TICKS = 4;
+    private static final int CLIENT_LAG_TOLERANCE_TICKS = 2;
+    private static final int CLIENT_CATCH_UP_TICKS = 2;
     private static final TerminalUiState TERMINAL_UI_STATE = TerminalUiState.getInstance();
 
     private final ClientId clientId;
     private final SimulationId requestedSimulationId;
-    private final LocalClientTransport transport;
+    private final ClientTransport transport;
     private final SimulationRegistry simulationRegistry = new SimulationRegistry();
     private final Map<SimulationId, Map<Integer, SimulationAugmentation>> queuedActionsBySimulation = new HashMap<>();
+    private final Map<SimulationId, TickSyncState> tickSyncStatesBySimulation = new HashMap<>();
     private final Set<SimulationId> attachedSimulationIds = new HashSet<>();
     private Ticker ticker;
     private BatchedSimulationRunner runner;
-    private int pendingSimulationTick = -1;
+    private int pendingSimulationStartTick = -1;
+    private int pendingSimulationSteps;
     private int remainingStartupBufferTicks;
     private boolean joinRequested;
 
-    public ClientApplication(ClientId clientId, SimulationId requestedSimulationId, LocalClientTransport transport) {
+    public ClientApplication(ClientId clientId, SimulationId requestedSimulationId, ClientTransport transport) {
         this.clientId = Objects.requireNonNull(clientId, "clientId");
         this.requestedSimulationId = Objects.requireNonNull(requestedSimulationId, "requestedSimulationId");
         this.transport = Objects.requireNonNull(transport, "transport");
@@ -53,7 +63,7 @@ public final class ClientApplication {
             return;
         }
 
-        transport.requestJoin(requestedSimulationId);
+        transport.send(new JoinSimulationRequestDTO(requestedSimulationId), false);
         joinRequested = true;
         System.out.println(
             "Client " + TERMINAL_UI_STATE.formatClient(clientId)
@@ -67,6 +77,7 @@ public final class ClientApplication {
 
     public void processIncomingMessages() {
         receiveInitialStates();
+        receiveTickSyncMessages();
         receiveAcknowledgements();
         receiveRejections();
         receiveSimulationUpdates();
@@ -83,12 +94,23 @@ public final class ClientApplication {
             return;
         }
 
+        pendingSimulationStartTick = -1;
+        pendingSimulationSteps = 0;
+
         if (remainingStartupBufferTicks > 0) {
             remainingStartupBufferTicks -= 1;
             return;
         }
 
-        pendingSimulationTick = ticker.tick();
+        int simulationSteps = determineSimulationSteps();
+        for (int index = 0; index < simulationSteps; index += 1) {
+            int simulationTick = ticker.tick();
+            if (pendingSimulationStartTick < 0) {
+                pendingSimulationStartTick = simulationTick;
+            }
+
+            pendingSimulationSteps += 1;
+        }
     }
 
     public void handleInput(CustomUserInput userInput) {
@@ -99,7 +121,7 @@ public final class ClientApplication {
             return;
         }
 
-        transport.sendSimulationInput(requestedSimulationId, augmentation);
+        transport.send(new SimulationInputRequestDTO(requestedSimulationId, augmentation), true);
 
         System.out.println(
             "Client " + TERMINAL_UI_STATE.formatClient(clientId)
@@ -108,13 +130,18 @@ public final class ClientApplication {
     }
 
     public void simulateCurrentTick() {
-        if (ticker == null || runner == null || pendingSimulationTick <= 0) {
+        if (ticker == null || runner == null || pendingSimulationSteps <= 0 || pendingSimulationStartTick <= 0) {
             return;
         }
 
-        applyQueuedActions(pendingSimulationTick);
-        runner.runTick(pendingSimulationTick);
-        pendingSimulationTick = -1;
+        for (int step = 0; step < pendingSimulationSteps; step += 1) {
+            int simulationTick = pendingSimulationStartTick + step;
+            applyQueuedActions(simulationTick);
+            runner.runTick(simulationTick);
+        }
+
+        pendingSimulationStartTick = -1;
+        pendingSimulationSteps = 0;
     }
 
     public void cleanup() {
@@ -146,6 +173,20 @@ public final class ClientApplication {
     private void receiveInitialStates() {
         for (InitialSimulationState initialState : transport.drainAs(InitialSimulationStateDTO.class)) {
             attachSimulation(initialState);
+        }
+    }
+
+    private void receiveTickSyncMessages() {
+        for (TickSyncMessage tickSyncMessage : transport.drainAs(TickSyncMessageDTO.class)) {
+            int observedTransportDelayTicks = Math.max(0, transport.getCurrentTick() - tickSyncMessage.getServerTick());
+            tickSyncStatesBySimulation.put(
+                tickSyncMessage.getSimulationId(),
+                new TickSyncState(tickSyncMessage.getServerTick(), transport.getCurrentTick(), observedTransportDelayTicks));
+            System.out.println(
+                "Client " + TERMINAL_UI_STATE.formatClient(clientId)
+                    + " synced to server tick " + tickSyncMessage.getServerTick()
+                    + " for " + TERMINAL_UI_STATE.formatSimulation(tickSyncMessage.getSimulationId())
+                    + " with observed delay " + observedTransportDelayTicks + " ticks");
         }
     }
 
@@ -187,7 +228,7 @@ public final class ClientApplication {
         if (ticker == null || runner == null) {
             ticker = new Ticker(initialState.getTick());
             runner = new BatchedSimulationRunner(1, "client");
-            remainingStartupBufferTicks = Math.max(0, CLIENT_STARTUP_BUFFER_TICKS - 1);
+            remainingStartupBufferTicks = Math.max(0, CLIENT_TARGET_LOCAL_BUFFER_TICKS - 1);
         }
 
         Simulation bufferedSimulation = new Simulation(initialState.getSimulationId(), initialState.getSnapshot());
@@ -199,7 +240,28 @@ public final class ClientApplication {
             "Client " + TERMINAL_UI_STATE.formatClient(clientId)
                 + " attached " + TERMINAL_UI_STATE.formatSimulation(bufferedSimulation.getId())
                 + " at snapshot tick " + initialState.getTick()
-                + " with startup buffer " + CLIENT_STARTUP_BUFFER_TICKS);
+                + " with startup buffer " + CLIENT_TARGET_LOCAL_BUFFER_TICKS);
+    }
+
+    private int determineSimulationSteps() {
+        TickSyncState tickSyncState = tickSyncStatesBySimulation.get(requestedSimulationId);
+        if (tickSyncState == null) {
+            return 1;
+        }
+
+        int estimatedServerTick = tickSyncState.estimateCurrentServerTick(transport.getCurrentTick());
+        int targetLagTicks = tickSyncState.observedTransportDelayTicks + CLIENT_TARGET_LOCAL_BUFFER_TICKS;
+        int currentLagTicks = estimatedServerTick - ticker.getTick();
+
+        if (currentLagTicks < targetLagTicks - CLIENT_LAG_TOLERANCE_TICKS) {
+            return 0;
+        }
+
+        if (currentLagTicks > targetLagTicks + CLIENT_LAG_TOLERANCE_TICKS) {
+            return CLIENT_CATCH_UP_TICKS;
+        }
+
+        return 1;
     }
 
     private static SimulationAugmentation toAugmentation(CustomUserInput userInput) {
@@ -212,5 +274,21 @@ public final class ClientApplication {
         }
 
         return null;
+    }
+
+    private static final class TickSyncState {
+        private final int serverTick;
+        private final int observedAtTransportTick;
+        private final int observedTransportDelayTicks;
+
+        private TickSyncState(int serverTick, int observedAtTransportTick, int observedTransportDelayTicks) {
+            this.serverTick = serverTick;
+            this.observedAtTransportTick = observedAtTransportTick;
+            this.observedTransportDelayTicks = observedTransportDelayTicks;
+        }
+
+        private int estimateCurrentServerTick(int currentTransportTick) {
+            return serverTick + Math.max(0, currentTransportTick - observedAtTransportTick);
+        }
     }
 }

@@ -1,0 +1,27 @@
+package com.factoryonline.foundation.protocol;
+
+import java.util.Objects;
+
+import com.factoryonline.foundation.ids.SimulationId;
+
+public final class TickSyncMessage {
+    private final SimulationId simulationId;
+    private final int serverTick;
+
+    public TickSyncMessage(SimulationId simulationId, int serverTick) {
+        this.simulationId = Objects.requireNonNull(simulationId, "simulationId");
+        if (serverTick < 0) {
+            throw new IllegalArgumentException("serverTick must not be negative");
+        }
+
+        this.serverTick = serverTick;
+    }
+
+    public SimulationId getSimulationId() {
+        return simulationId;
+    }
+
+    public int getServerTick() {
+        return serverTick;
+    }
+}

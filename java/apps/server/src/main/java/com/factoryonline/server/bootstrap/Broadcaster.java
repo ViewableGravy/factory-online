@@ -8,14 +8,16 @@ import java.util.Objects;
 
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
+import com.factoryonline.foundation.protocol.SimulationUpdateDTO;
+import com.factoryonline.foundation.protocol.TickSyncMessageDTO;
 import com.factoryonline.simulation.SimulationAugmentation;
-import com.factoryonline.transport.local.LocalServerTransport;
+import com.factoryonline.transport.ServerTransport;
 
 public final class Broadcaster {
-    private final LocalServerTransport transport;
+    private final ServerTransport transport;
     private final Map<SimulationId, List<ClientId>> subscribersBySimulation = new HashMap<>();
 
-    public Broadcaster(LocalServerTransport transport) {
+    public Broadcaster(ServerTransport transport) {
         this.transport = Objects.requireNonNull(transport, "transport");
     }
 
@@ -41,7 +43,20 @@ public final class Broadcaster {
         }
 
         for (ClientId clientId : List.copyOf(subscribers)) {
-            transport.sendSimulationUpdate(clientId, validatedSimulationId, augmentation, tick);
+            transport.send(clientId, new SimulationUpdateDTO(validatedSimulationId, augmentation, tick));
+        }
+    }
+
+    public void broadcastTickSync(SimulationId simulationId, int serverTick) {
+        SimulationId validatedSimulationId = Objects.requireNonNull(simulationId, "simulationId");
+
+        List<ClientId> subscribers = subscribersBySimulation.get(validatedSimulationId);
+        if (subscribers == null) {
+            return;
+        }
+
+        for (ClientId clientId : List.copyOf(subscribers)) {
+            transport.send(clientId, new TickSyncMessageDTO(validatedSimulationId, serverTick));
         }
     }
 }

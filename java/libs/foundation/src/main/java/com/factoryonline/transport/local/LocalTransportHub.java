@@ -11,6 +11,7 @@ import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.protocol.ClientTransportMessageDTO;
 import com.factoryonline.foundation.protocol.ProtocolDTO;
 import com.factoryonline.foundation.protocol.ProtocolDTOContainer;
+import com.factoryonline.transport.TransportMessage;
 
 public final class LocalTransportHub {
     private final int transportDelayTicks;
@@ -48,11 +49,12 @@ public final class LocalTransportHub {
         return currentTick;
     }
 
-    synchronized void sendToServer(ClientId clientId, ProtocolDTO<?> dto, boolean delayed) {
+    synchronized void sendToServer(ClientId clientId, TransportMessage message, boolean delayed) {
         serverInbox.schedule(
-            new ClientTransportMessageDTO(
-                Objects.requireNonNull(clientId, "clientId"),
-                Objects.requireNonNull(dto, "dto").toContainer()),
+            new TransportMessage(
+                new ClientTransportMessageDTO(
+                    Objects.requireNonNull(clientId, "clientId"),
+                    Objects.requireNonNull(message, "message").getPayload())),
             currentTick + (delayed ? transportDelayTicks : 0));
     }
 
@@ -60,10 +62,10 @@ public final class LocalTransportHub {
         return serverInbox.drainAs(dtoClass, currentTick);
     }
 
-    synchronized void sendToClient(ClientId clientId, ProtocolDTO<?> dto) {
+    synchronized void sendToClient(ClientId clientId, TransportMessage message) {
         ClientInbox inbox = requireClientInbox(clientId);
         inbox.messageQueue.schedule(
-            Objects.requireNonNull(dto, "dto"),
+            Objects.requireNonNull(message, "message"),
             currentTick + transportDelayTicks);
     }
 
@@ -89,8 +91,8 @@ public final class LocalTransportHub {
         private final List<ScheduledValue<ProtocolDTOContainer>> scheduledDtos = new ArrayList<>();
         private final Map<String, List<ProtocolDTOContainer>> queuedDtosById = new HashMap<>();
 
-        private void schedule(ProtocolDTO<?> dto, int deliveryTick) {
-            scheduledDtos.add(new ScheduledValue<>(dto.toContainer(), deliveryTick));
+        private void schedule(TransportMessage message, int deliveryTick) {
+            scheduledDtos.add(new ScheduledValue<>(message.getPayload(), deliveryTick));
         }
 
         private <T, D extends ProtocolDTO<T>> List<T> drainAs(Class<D> dtoClass, int currentTick) {

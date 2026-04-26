@@ -4,18 +4,13 @@ import java.util.List;
 import java.util.Objects;
 
 import com.factoryonline.foundation.ids.ClientId;
-import com.factoryonline.foundation.ids.SimulationId;
-import com.factoryonline.foundation.protocol.AckMessageDTO;
 import com.factoryonline.foundation.protocol.ClientTransportMessage;
 import com.factoryonline.foundation.protocol.ClientTransportMessageDTO;
-import com.factoryonline.foundation.protocol.InitialSimulationStateDTO;
 import com.factoryonline.foundation.protocol.ProtocolDTO;
-import com.factoryonline.foundation.protocol.RejectionMessageDTO;
-import com.factoryonline.foundation.protocol.SimulationUpdateDTO;
-import com.factoryonline.simulation.SimulationAugmentation;
-import com.factoryonline.simulation.SimulationSnapshot;
+import com.factoryonline.transport.ServerTransport;
+import com.factoryonline.transport.TransportMessage;
 
-public final class LocalServerTransport {
+public final class LocalServerTransport implements ServerTransport {
     private final LocalTransportHub transportHub;
 
     LocalServerTransport(LocalTransportHub transportHub) {
@@ -26,23 +21,11 @@ public final class LocalServerTransport {
         return transportHub.drainServerAs(dtoClass);
     }
 
-    public List<ClientTransportMessage> drainClientMessages() {
+    public List<ClientTransportMessage> drainMessages() {
         return transportHub.drainServerAs(ClientTransportMessageDTO.class);
     }
 
-    public void sendInitialState(ClientId clientId, SimulationId simulationId, SimulationSnapshot snapshot, int tick) {
-        transportHub.sendToClient(clientId, new InitialSimulationStateDTO(simulationId, snapshot, tick));
-    }
-
-    public void sendAck(ClientId clientId, SimulationId simulationId, int tick, String message) {
-        transportHub.sendToClient(clientId, new AckMessageDTO(simulationId, tick, message));
-    }
-
-    public void sendRejection(ClientId clientId, SimulationId simulationId, int tick, String message) {
-        transportHub.sendToClient(clientId, new RejectionMessageDTO(simulationId, tick, message));
-    }
-
-    public void sendSimulationUpdate(ClientId clientId, SimulationId simulationId, SimulationAugmentation augmentation, int tick) {
-        transportHub.sendToClient(clientId, new SimulationUpdateDTO(simulationId, augmentation, tick));
+    public void send(ClientId clientId, TransportMessage message) {
+        transportHub.sendToClient(clientId, message);
     }
 }
