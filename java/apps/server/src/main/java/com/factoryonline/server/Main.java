@@ -18,12 +18,13 @@ public final class Main {
     private static final SimulationId CLIENT_1_SIMULATION_ID = new SimulationId("Simulation 1");
     private static final SimulationId CLIENT_2_SIMULATION_ID = new SimulationId("Simulation 2");
     private static final String SELECT_CLIENT_COMMAND = "/client";
+    private static final String SERVER_COMMAND_PREFIX = "/server";
 
     private Main() {
     }
 
-    private static boolean isServerCommand(CustomUserInput userInput) {
-        return userInput.getRaw().strip().startsWith("/");
+    private static boolean isAdminCommand(CustomUserInput userInput) {
+        return userInput.getRaw().strip().startsWith("/") && !userInput.getRaw().strip().startsWith(SERVER_COMMAND_PREFIX + " ");
     }
 
     public static void main(String[] args) throws IOException {
@@ -68,7 +69,14 @@ public final class Main {
                         continue;
                     }
 
-                    if (isServerCommand(userInput)) {
+                    String serverCommand = extractServerCommand(userInput);
+                    if (serverCommand != null && CustomUserInput.fromRaw(serverCommand).isContinue()) {
+                        System.out.println("Unknown /server command: " + serverCommand);
+                        printPrompt();
+                        continue;
+                    }
+
+                    if (isAdminCommand(userInput)) {
                         server.handleAdminCommand(userInput.getRaw());
                         printPrompt();
                         continue;
@@ -83,7 +91,11 @@ public final class Main {
                     // for a static amount of ticks, but instead be measured in MS
                     transport.advanceTick();
 
-                    handleClientInput(client1, client2, userInput, terminalUiState);
+                    if (serverCommand != null) {
+                        server.handleServerCommand(serverCommand);
+                    } else {
+                        handleClientInput(client1, client2, userInput, terminalUiState);
+                    }
 
                     server.processIncomingMessages();
                     client1.processIncomingMessages();
@@ -101,6 +113,20 @@ public final class Main {
             client2.cleanup();
             server.cleanup();
         }
+    }
+
+    private static String extractServerCommand(CustomUserInput userInput) {
+        String normalizedInput = userInput.getRaw().strip();
+        if (!normalizedInput.startsWith(SERVER_COMMAND_PREFIX + " ")) {
+            return null;
+        }
+
+        String command = normalizedInput.substring((SERVER_COMMAND_PREFIX + " ").length()).strip();
+        if (command.isEmpty()) {
+            return null;
+        }
+
+        return command;
     }
 
     private static boolean handleClientSelectionCommand(CustomUserInput userInput) {

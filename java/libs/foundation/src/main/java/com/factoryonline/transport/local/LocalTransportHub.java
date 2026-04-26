@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import com.factoryonline.foundation.ids.ClientId;
+import com.factoryonline.foundation.protocol.ClientTransportMessageDTO;
 import com.factoryonline.foundation.protocol.ProtocolDTO;
 import com.factoryonline.foundation.protocol.ProtocolDTOContainer;
 
@@ -47,9 +48,11 @@ public final class LocalTransportHub {
         return currentTick;
     }
 
-    synchronized void sendToServer(ProtocolDTO<?> dto, boolean delayed) {
+    synchronized void sendToServer(ClientId clientId, ProtocolDTO<?> dto, boolean delayed) {
         serverInbox.schedule(
-            Objects.requireNonNull(dto, "dto"),
+            new ClientTransportMessageDTO(
+                Objects.requireNonNull(clientId, "clientId"),
+                Objects.requireNonNull(dto, "dto").toContainer()),
             currentTick + (delayed ? transportDelayTicks : 0));
     }
 

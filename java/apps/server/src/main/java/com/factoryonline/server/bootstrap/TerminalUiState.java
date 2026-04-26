@@ -68,7 +68,7 @@ public final class TerminalUiState {
             + formatClient(clientId)
             + " -> "
             + formatSimulation(display.simulationId)
-            + "] Enter=tick, up/down=apply, /client X=switch, /add-simulation=server, exit=quit: ";
+            + "] Enter=tick, up/down=apply, /server up|down, /client X=switch, /add-simulation=server, exit=quit: ";
     }
 
     public synchronized String formatClient(ClientId clientId) {

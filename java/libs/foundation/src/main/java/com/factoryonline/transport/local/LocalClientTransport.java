@@ -24,11 +24,11 @@ public final class LocalClientTransport {
     }
 
     public void requestJoin(SimulationId simulationId) {
-        transportHub.sendToServer(new JoinSimulationRequestDTO(clientId, simulationId), false);
+        transportHub.sendToServer(clientId, new JoinSimulationRequestDTO(simulationId), false);
     }
 
     public void sendSimulationInput(SimulationId simulationId, SimulationAugmentation augmentation) {
-        transportHub.sendToServer(new SimulationInputRequestDTO(clientId, simulationId, augmentation), true);
+        transportHub.sendToServer(clientId, new SimulationInputRequestDTO(simulationId, augmentation), true);
     }
 
     public int getCurrentTick() {

@@ -9,8 +9,12 @@ import java.util.Set;
 
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
+import com.factoryonline.foundation.protocol.AckMessage;
+import com.factoryonline.foundation.protocol.AckMessageDTO;
 import com.factoryonline.foundation.protocol.InitialSimulationState;
 import com.factoryonline.foundation.protocol.InitialSimulationStateDTO;
+import com.factoryonline.foundation.protocol.RejectionMessage;
+import com.factoryonline.foundation.protocol.RejectionMessageDTO;
 import com.factoryonline.foundation.protocol.SimulationUpdate;
 import com.factoryonline.foundation.protocol.SimulationUpdateDTO;
 import com.factoryonline.server.bootstrap.BatchedSimulationRunner;
@@ -63,6 +67,8 @@ public final class ClientApplication {
 
     public void processIncomingMessages() {
         receiveInitialStates();
+        receiveAcknowledgements();
+        receiveRejections();
         receiveSimulationUpdates();
     }
 
@@ -140,6 +146,24 @@ public final class ClientApplication {
     private void receiveInitialStates() {
         for (InitialSimulationState initialState : transport.drainAs(InitialSimulationStateDTO.class)) {
             attachSimulation(initialState);
+        }
+    }
+
+    private void receiveAcknowledgements() {
+        for (AckMessage ackMessage : transport.drainAs(AckMessageDTO.class)) {
+            System.out.println(
+                "Client " + TERMINAL_UI_STATE.formatClient(clientId)
+                    + " received Ack for " + TERMINAL_UI_STATE.formatSimulation(ackMessage.getSimulationId())
+                    + " at tick " + ackMessage.getTick() + ": " + ackMessage.getMessage());
+        }
+    }
+
+    private void receiveRejections() {
+        for (RejectionMessage rejectionMessage : transport.drainAs(RejectionMessageDTO.class)) {
+            System.out.println(
+                "Client " + TERMINAL_UI_STATE.formatClient(clientId)
+                    + " received Rej for " + TERMINAL_UI_STATE.formatSimulation(rejectionMessage.getSimulationId())
+                    + " at tick " + rejectionMessage.getTick() + ": " + rejectionMessage.getMessage());
         }
     }
 
