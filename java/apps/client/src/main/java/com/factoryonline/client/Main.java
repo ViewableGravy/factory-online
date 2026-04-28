@@ -12,8 +12,8 @@ import com.factoryonline.foundation.config.RuntimeTiming;
 import com.factoryonline.foundation.config.TerminalCommands;
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationIds;
+import com.factoryonline.foundation.terminal.TerminalCommandHandler;
 import com.factoryonline.foundation.timing.TickDeadline;
-import com.factoryonline.server.bootstrap.CustomBufferedReader;
 import com.factoryonline.server.bootstrap.CustomUserInput;
 import com.factoryonline.server.bootstrap.TerminalUiState;
 import com.factoryonline.transport.tcp.TcpClientTransport;
@@ -22,7 +22,6 @@ public final class Main {
     public static final ClientId clientId = new ClientId("client-" + UUID.randomUUID().toString().substring(0, 8));
     public static final Queue<CustomUserInput> queuedInputs = new ConcurrentLinkedQueue<>();
     public static final AtomicBoolean running = new AtomicBoolean(true);
-    public static final AtomicBoolean promptRequested = new AtomicBoolean(false);
 
     public static void main(String[] args) throws IOException {
         TcpClientTransport transport = new TcpClientTransport(
@@ -37,23 +36,24 @@ public final class Main {
 
         Thread tickThread = createTickThread(client, transport);
 
-        try{try (CustomBufferedReader reader = new CustomBufferedReader(System.in)) {
-            printPrompt();
-            CustomUserInput userInput;
+        try {
+            try (TerminalCommandHandler commandHandler = TerminalCommandHandler.createClientHandler()) {
+                String rawCommand;
 
-            while ((userInput = reader.readLine()) != null) {
-                if (userInput.isExit()) {
-                    running.set(false);
-                    break;
+                while ((rawCommand = commandHandler.readCommand(prompt())) != null) {
+                    CustomUserInput userInput = CustomUserInput.fromRaw(rawCommand);
+
+                    if (userInput.isExit()) {
+                        running.set(false);
+                        break;
+                    }
+
+                    if (!rawCommand.strip().isEmpty()) {
+                        queuedInputs.add(userInput);
+                    }
                 }
-
-                if (!userInput.getRaw().strip().isEmpty()) {
-                    queuedInputs.add(userInput);
-                }
-
-                promptRequested.set(true);
             }
-        }} finally {
+        } finally {
             running.set(false);
             
             tickThread.interrupt();
@@ -83,8 +83,6 @@ public final class Main {
                 client.processIncomingMessages();
                 client.simulateCurrentTick();
 
-                printPromptIfRequested();
-
                 tickDeadline.sleepUntilNextTick();
             }
         }, "split-client-loop");
@@ -95,25 +93,18 @@ public final class Main {
         return tickThread;
     }
 
-    private static void printPromptIfRequested() {
-        if (promptRequested.getAndSet(false) && running.get()) {
-            printPrompt();
-        }
-    }
-
-    private static void printPrompt() {
-        System.out.print(
-            "Client ["
-                + TerminalUiState.getInstance().formatClient(clientId)
-                + "] "
-                + TerminalCommands.SNAPSHOT_COMMAND
-                + ", "
-                + TerminalCommands.INCREMENT_COMMAND
-                + "/"
-                + TerminalCommands.DECREMENT_COMMAND
-                + "=apply, "
-                + TerminalCommands.EXIT_COMMAND
-                + "=quit: ");
+    private static String prompt() {
+        return "Client ["
+            + TerminalUiState.getInstance().formatClient(clientId)
+            + "] "
+            + TerminalCommands.SNAPSHOT_COMMAND
+            + ", "
+            + TerminalCommands.INCREMENT_COMMAND
+            + "/"
+            + TerminalCommands.DECREMENT_COMMAND
+            + "=apply, "
+            + TerminalCommands.EXIT_COMMAND
+            + "=quit: ";
     }
 
     private static void printConnectedMessage() {

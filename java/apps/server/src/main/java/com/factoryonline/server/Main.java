@@ -8,16 +8,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import com.factoryonline.foundation.config.NetworkConfig;
 import com.factoryonline.foundation.config.RuntimeTiming;
 import com.factoryonline.foundation.config.TerminalCommands;
+import com.factoryonline.foundation.terminal.TerminalCommandHandler;
 import com.factoryonline.foundation.timing.TickDeadline;
-import com.factoryonline.server.bootstrap.CustomBufferedReader;
 import com.factoryonline.server.bootstrap.CustomUserInput;
 import com.factoryonline.server.bootstrap.ServerApplication;
 import com.factoryonline.server.bootstrap.TerminalUiState;
 import com.factoryonline.transport.tcp.TcpServerTransport;
 
 public final class Main {
-    private static final AtomicBoolean promptRequested = new AtomicBoolean(false);
-
     private Main() {
     }
 
@@ -40,21 +38,20 @@ public final class Main {
 
             Thread tickThread = startServerLoop(server, queuedCommands, running);
             try {
-                try (CustomBufferedReader reader = new CustomBufferedReader(System.in)) {
-                    printPrompt();
-                    CustomUserInput userInput;
+                try (TerminalCommandHandler commandHandler = TerminalCommandHandler.createServerHandler()) {
+                    String rawCommand;
 
-                    while ((userInput = reader.readLine()) != null) {
+                    while ((rawCommand = commandHandler.readCommand(prompt())) != null) {
+                        CustomUserInput userInput = CustomUserInput.fromRaw(rawCommand);
+
                         if (userInput.isExit()) {
                             running.set(false);
                             break;
                         }
 
-                        if (!userInput.getRaw().strip().isEmpty()) {
-                            queuedCommands.add(userInput.getRaw());
+                        if (!rawCommand.strip().isEmpty()) {
+                            queuedCommands.add(rawCommand);
                         }
-
-                        promptRequested.set(true);
                     }
                 }
             } finally {
@@ -92,19 +89,12 @@ public final class Main {
                 drainCommands(server, queuedCommands);
                 server.processIncomingMessages();
                 server.simulateCurrentTick();
-                printPromptIfRequested(promptRequested, running);
                 tickDeadline.sleepUntilNextTick();
             }
         }, "split-server-loop");
         tickThread.setDaemon(true);
         tickThread.start();
         return tickThread;
-    }
-
-    private static void printPromptIfRequested(AtomicBoolean promptRequested, AtomicBoolean running) {
-        if (promptRequested.getAndSet(false) && running.get()) {
-            printPrompt();
-        }
     }
 
     private static void drainCommands(ServerApplication server, Queue<String> queuedCommands) {
@@ -135,17 +125,16 @@ public final class Main {
         System.out.println("Server ignored input: " + rawCommand.strip());
     }
 
-    private static void printPrompt() {
-        System.out.print(
-            "Server ["
-                + TerminalCommands.SNAPSHOT_COMMAND
-                + ", "
-                + TerminalCommands.ADD_SIMULATION_COMMAND
-                + ", "
-                + TerminalCommands.SERVER_DIRECTION_USAGE
-                + ", "
-                + TerminalCommands.EXIT_COMMAND
-                + "]: ");
+    private static String prompt() {
+        return "Server ["
+            + TerminalCommands.SNAPSHOT_COMMAND
+            + ", "
+            + TerminalCommands.ADD_SIMULATION_COMMAND
+            + ", "
+            + TerminalCommands.SERVER_DIRECTION_USAGE
+            + ", "
+            + TerminalCommands.EXIT_COMMAND
+            + "]: ";
     }
 
     private static void interruptAndJoin(Thread thread) {

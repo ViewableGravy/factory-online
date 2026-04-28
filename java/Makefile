@@ -1,26 +1,19 @@
-JAVA := java
-JAVAC := javac
-
-BUILD_DIR := build/classes
-SRC_DIRS := apps libs
-JAVA_SOURCES := $(shell find $(SRC_DIRS) -path '*/src/main/java/*' -name '*.java')
-SERVER_MAIN := com.factoryonline.server.Main
-CLIENT_MAIN := com.factoryonline.client.Main
+GRADLEW := ./gradlew
+GRADLE_ARGS := --console=plain
 
 .PHONY: run run-client build clean verify-delay
 
-run: build
-	$(JAVA) -cp $(BUILD_DIR) $(SERVER_MAIN)
+run:
+	$(GRADLEW) $(GRADLE_ARGS) runServer
 
-run-client: build
-	$(JAVA) -cp $(BUILD_DIR) $(CLIENT_MAIN)
+run-client:
+	$(GRADLEW) $(GRADLE_ARGS) runClient
 
 build:
-	@mkdir -p $(BUILD_DIR)
-	$(JAVAC) -d $(BUILD_DIR) $(JAVA_SOURCES)
+	$(GRADLEW) $(GRADLE_ARGS) classes
 
 clean:
-	rm -rf build
+	$(GRADLEW) $(GRADLE_ARGS) clean
 
 verify-delay: build
 	./scripts/verify-delay-regression.sh

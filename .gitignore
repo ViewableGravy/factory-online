@@ -2,3 +2,29 @@
 /.flux/
 /java/build/
 .codex
+# Gradle
+.gradle/
+build/
+**/build/
+out/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Gradle wrapper files (keep these)
+/gradle/wrapper/gradle-wrapper.jar
+/gradle/wrapper/gradle-wrapper.properties
+
+# IDEs
+.idea/
+*.iml
+*.iws
+*.ipr
+.classpath
+.project
+.settings/
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

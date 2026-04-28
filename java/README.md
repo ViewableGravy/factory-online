@@ -23,7 +23,8 @@ java/
     foundation/
     simulation-core/
   build/
-  Makefile
+  build.gradle.kts
+  gradlew
   run-client.sh
   run-server.sh
 ```
@@ -52,23 +53,23 @@ Pass `-v` to show the underlying build and run commands before the application s
 Or explicitly:
 
 ```bash
-make run
+./gradlew --console=plain runServer
 ```
 
 and:
 
 ```bash
-make run-client
+./gradlew --console=plain runClient
 ```
 
 ## Build
 
 ```bash
-make build
+./gradlew --console=plain classes
 ```
 
 ## Clean
 
 ```bash
-make clean
+./gradlew --console=plain clean
 ```

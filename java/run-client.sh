@@ -16,8 +16,10 @@ if [[ "$#" -gt 0 ]]; then
 	exit 1
 fi
 
+gradle_args=(--console=plain)
+
 if [[ "$verbose" == true ]]; then
-	make -C "$script_dir" run-client
+	"$script_dir/gradlew" "${gradle_args[@]}" runClient
 else
-	make -s -C "$script_dir" run-client
+	"$script_dir/gradlew" "${gradle_args[@]}" -q runClient
 fi
