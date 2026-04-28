@@ -13,8 +13,8 @@ repositories {
 }
 
 dependencies {
-    implementation("org.jline:jline:4.0.0:jdk11")
-    implementation("org.jline:jline-terminal-jni:4.0.0")
+    implementation("org.jline:jline:4.0.12:jdk11")
+    implementation("org.jline:jline-terminal-jni:4.0.12")
 }
 
 java {

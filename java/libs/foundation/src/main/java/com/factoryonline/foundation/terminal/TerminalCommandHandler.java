@@ -23,6 +23,7 @@ public final class TerminalCommandHandler implements Closeable {
     private final LineReader lineReader;
 
     private TerminalCommandHandler(TreeCompleter completer, boolean bindArrowCommands) throws IOException {
+        preferNativeRedirectPipeCreation();
         this.terminal = createTerminal();
         this.lineReader = LineReaderBuilder.builder()
             .terminal(terminal)
@@ -74,6 +75,18 @@ public final class TerminalCommandHandler implements Closeable {
         lineReader.getBuffer().write(command);
         lineReader.callWidget(LineReader.ACCEPT_LINE);
         return true;
+    }
+
+    private static void preferNativeRedirectPipeCreation() {
+        if (System.getProperty(TerminalBuilder.PROP_REDIRECT_PIPE_CREATION_MODE) != null) {
+            return;
+        }
+
+        System.setProperty(
+            TerminalBuilder.PROP_REDIRECT_PIPE_CREATION_MODE,
+            TerminalBuilder.PROP_REDIRECT_PIPE_CREATION_MODE_NATIVE
+                + ","
+                + TerminalBuilder.PROP_REDIRECT_PIPE_CREATION_MODE_REFLECTION);
     }
 
     private static Terminal createTerminal() throws IOException {
