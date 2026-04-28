@@ -22,6 +22,8 @@ import com.factoryonline.foundation.protocol.ProtocolDTOContainer;
 import com.factoryonline.foundation.protocol.RejectionMessageDTO;
 import com.factoryonline.foundation.protocol.SimulationInputRequest;
 import com.factoryonline.foundation.protocol.SimulationInputRequestDTO;
+import com.factoryonline.foundation.protocol.TickSyncMessageDTO;
+import com.factoryonline.foundation.timing.TickControl;
 import com.factoryonline.simulation.Simulation;
 import com.factoryonline.simulation.SimulationActionResult;
 import com.factoryonline.simulation.SimulationAugmentation;
@@ -40,6 +42,8 @@ public final class ServerApplication {
     private final Map<ClientId, Session> sessionsByClientId = new HashMap<>();
     private final Map<Integer, List<BufferedSimulationInput>> bufferedInputsByTick = new HashMap<>();
     private final Map<Integer, Map<SimulationId, Simulation>> validationSimulationsByTick = new HashMap<>();
+    private TickControl tickControl = TickControl.automatic(RuntimeTiming.TICK_INTERVAL_MILLIS);
+    private int requestedManualTicks;
     private int pendingSimulationTick = -1;
 
     public ServerApplication(ServerTransport transport) {
@@ -52,10 +56,11 @@ public final class ServerApplication {
         this.simulationIdFactory = new SimulationIdFactory();
     }
 
-    public void setup() {
+    public ServerApplication configureDefault() {
         registerSimulation(new Simulation(simulationIdFactory.create()));
         registerSimulation(new Simulation(simulationIdFactory.create()));
         registerSimulation(new Simulation(simulationIdFactory.create()));
+        return this;
     }
 
     public void processIncomingMessages() {
@@ -74,15 +79,20 @@ public final class ServerApplication {
 
         applyBufferedInputs(pendingSimulationTick);
         runner.runTick(pendingSimulationTick);
-        if (pendingSimulationTick % RuntimeTiming.SERVER_TICK_SYNC_INTERVAL == 0) {
-            for (Simulation simulation : registry.all()) {
-                broadcaster.broadcastTickSync(
-                    simulation.getId(),
-                    pendingSimulationTick,
-                    simulation.checksum());
-            }
+        if (shouldBroadcastTickSync(pendingSimulationTick)) {
+            broadcastCurrentTickState(pendingSimulationTick);
         }
         pendingSimulationTick = -1;
+    }
+
+    public synchronized TickControl getTickControl() {
+        return tickControl;
+    }
+
+    public synchronized int drainRequestedManualTicks() {
+        int bufferedRequestedTicks = requestedManualTicks;
+        requestedManualTicks = 0;
+        return bufferedRequestedTicks;
     }
 
     public void cleanup() {
@@ -90,51 +100,72 @@ public final class ServerApplication {
         runner.close();
     }
 
-    public void handleAdminCommand(String rawCommand) {
-        String normalizedCommand = Objects.requireNonNull(rawCommand, "rawCommand").strip();
-
-        if (TerminalCommands.SNAPSHOT_COMMAND.equalsIgnoreCase(normalizedCommand)) {
-            runner.requestSnapshot();
-            return;
-        }
-
-        if (!TerminalCommands.ADD_SIMULATION_COMMAND.equalsIgnoreCase(normalizedCommand)) {
-            System.out.println("Server ignored unknown command: " + normalizedCommand);
-            return;
-        }
-
-        Simulation simulation = new Simulation(simulationIdFactory.create());
-        registerSimulation(simulation);
-        System.out.println(
-            TERMINAL_UI_STATE.formatServerLabel()
-                + " added simulation " + TERMINAL_UI_STATE.formatSimulation(simulation.getId()) + " in base state");
+    public boolean isManualTickMode() {
+        return getTickControl().isManual();
     }
 
-    public void handleServerCommand(String rawCommand) {
-        CustomUserInput serverInput = CustomUserInput.fromRaw(Objects.requireNonNull(rawCommand, "rawCommand"));
-        SimulationAugmentation augmentation = toAugmentation(serverInput);
-        if (augmentation == null) {
-            System.out.println(
-                TERMINAL_UI_STATE.formatServerLabel()
-                    + " ignored unknown "
-                    + TerminalCommands.SERVER_COMMAND_PREFIX
-                    + " command: "
-                    + rawCommand.strip());
-            return;
+    public boolean hasActiveSession() {
+        return findAnySession() != null;
+    }
+
+    public void requestSnapshot() {
+        runner.requestSnapshot();
+    }
+
+    public SimulationId addSimulation() {
+        Simulation simulation = new Simulation(simulationIdFactory.create());
+        registerSimulation(simulation);
+        return simulation.getId();
+    }
+
+    public void queueManualTicks(int requestedTicks) {
+        if (requestedTicks <= 0) {
+            throw new IllegalArgumentException("requestedTicks must be positive");
         }
 
+        synchronized (this) {
+            if (!tickControl.isManual()) {
+                throw new IllegalStateException("manual ticks require manual tick mode");
+            }
+
+            requestedManualTicks += requestedTicks;
+        }
+    }
+
+    public TickControl setTickMode(com.factoryonline.foundation.timing.TickMode nextMode) {
+        synchronized (this) {
+            tickControl = tickControl.withMode(Objects.requireNonNull(nextMode, "nextMode"));
+            if (nextMode == com.factoryonline.foundation.timing.TickMode.AUTOMATIC) {
+                requestedManualTicks = 0;
+            }
+        }
+
+        broadcastCurrentTickState(currentSnapshotTick());
+        return getTickControl();
+    }
+
+    public TickControl setTickIntervalMillis(int tickIntervalMillis) {
+        if (tickIntervalMillis <= 0) {
+            throw new IllegalArgumentException("tickIntervalMillis must be positive");
+        }
+
+        synchronized (this) {
+            tickControl = tickControl.withTickIntervalMillis(tickIntervalMillis);
+        }
+
+        broadcastCurrentTickState(currentSnapshotTick());
+        return getTickControl();
+    }
+
+    public void queueServerSimulationInput(SimulationAugmentation augmentation) {
         Session serverSession = findAnySession();
         if (serverSession == null) {
-            System.out.println(
-                TERMINAL_UI_STATE.formatServerLabel()
-                    + " ignored "
-                    + TerminalCommands.SERVER_COMMAND_PREFIX
-                    + " command: no active sessions");
-            return;
+            throw new IllegalStateException("server simulation input requires an active session");
         }
 
+        SimulationAugmentation validatedAugmentation = Objects.requireNonNull(augmentation, "augmentation");
         int targetTick = ticker.getTick();
-        SimulationActionResult validationResult = queueValidatedInput(serverSession, augmentation, targetTick);
+        SimulationActionResult validationResult = queueValidatedInput(serverSession, validatedAugmentation, targetTick);
         if (!validationResult.isSuccess()) {
             System.out.println(
                 TERMINAL_UI_STATE.formatServerLabel()
@@ -145,7 +176,7 @@ public final class ServerApplication {
             return;
         }
 
-        broadcaster.broadcast(serverSession.getSimulationId(), targetTick, augmentation);
+        broadcaster.broadcast(serverSession.getSimulationId(), targetTick, validatedAugmentation);
         System.out.println(
             TERMINAL_UI_STATE.formatServerLabel()
                 + " applied "
@@ -200,6 +231,7 @@ public final class ServerApplication {
         broadcaster.subscribe(simulationId, clientId);
         int snapshotTick = currentSnapshotTick();
         transport.send(clientId, new InitialSimulationStateDTO(simulationId, simulation.snapshot(), snapshotTick));
+        transport.send(clientId, new TickSyncMessageDTO(simulationId, snapshotTick, simulation.checksum(), getTickControl()));
         transport.send(clientId, new AckMessageDTO(simulationId, ticker.getTick(), "join accepted"));
 
         System.out.println(
@@ -306,18 +338,6 @@ public final class ServerApplication {
         return simulations.get(ThreadLocalRandom.current().nextInt(simulations.size()));
     }
 
-    private static SimulationAugmentation toAugmentation(CustomUserInput userInput) {
-        if (userInput.isIncrement()) {
-            return new SimulationAugmentation(1);
-        }
-
-        if (userInput.isDecrement()) {
-            return new SimulationAugmentation(-1);
-        }
-
-        return null;
-    }
-
     private int currentSnapshotTick() {
         if (pendingSimulationTick > 0) {
             return pendingSimulationTick - 1;
@@ -329,6 +349,22 @@ public final class ServerApplication {
     private void registerSimulation(Simulation simulation) {
         registry.register(simulation);
         runner.addSimulation(simulation);
+    }
+
+    private boolean shouldBroadcastTickSync(int tick) {
+        TickControl currentTickControl = getTickControl();
+        return currentTickControl.isManual() || tick % RuntimeTiming.SERVER_TICK_SYNC_INTERVAL == 0;
+    }
+
+    private void broadcastCurrentTickState(int tick) {
+        TickControl currentTickControl = getTickControl();
+        for (Simulation simulation : registry.all()) {
+            broadcaster.broadcastTickSync(
+                simulation.getId(),
+                tick,
+                simulation.checksum(),
+                currentTickControl);
+        }
     }
 
     private static final class BufferedSimulationInput {

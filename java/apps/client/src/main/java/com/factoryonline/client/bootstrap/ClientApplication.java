@@ -7,7 +7,6 @@ import java.util.Objects;
 import java.util.Set;
 
 import com.factoryonline.foundation.config.RuntimeTiming;
-import com.factoryonline.foundation.config.TerminalCommands;
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
 import com.factoryonline.foundation.ids.SimulationIds;
@@ -23,8 +22,8 @@ import com.factoryonline.foundation.protocol.SimulationUpdate;
 import com.factoryonline.foundation.protocol.SimulationUpdateDTO;
 import com.factoryonline.foundation.protocol.TickSyncMessage;
 import com.factoryonline.foundation.protocol.TickSyncMessageDTO;
+import com.factoryonline.foundation.timing.TickControl;
 import com.factoryonline.server.bootstrap.BatchedSimulationRunner;
-import com.factoryonline.server.bootstrap.CustomUserInput;
 import com.factoryonline.server.bootstrap.TerminalUiState;
 import com.factoryonline.server.bootstrap.Ticker;
 import com.factoryonline.simulation.Simulation;
@@ -45,6 +44,7 @@ public final class ClientApplication {
     private final Map<SimulationId, Map<Integer, Integer>> queuedChecksumsBySimulation = new HashMap<>();
     private final Map<SimulationId, TickSyncState> tickSyncStatesBySimulation = new HashMap<>();
     private final Set<SimulationId> attachedSimulationIds = new HashSet<>();
+    private TickControl tickControl = TickControl.automatic(RuntimeTiming.TICK_INTERVAL_MILLIS);
     private Ticker ticker;
     private BatchedSimulationRunner runner;
     private int pendingSimulationStartTick = -1;
@@ -109,32 +109,38 @@ public final class ClientApplication {
         }
     }
 
-    public void handleInput(CustomUserInput userInput) {
-        Objects.requireNonNull(userInput, "userInput");
+    public TickControl getTickControl() {
+        return tickControl;
+    }
 
-        if (TerminalCommands.SNAPSHOT_COMMAND.equalsIgnoreCase(userInput.getRaw().strip())) {
-            if (runner == null) {
-                System.out.println(
-                    "Client " + TERMINAL_UI_STATE.formatClient(clientId) + " is still waiting for an initial snapshot");
-                return;
-            }
+    public boolean canRequestSnapshot() {
+        return runner != null;
+    }
 
-            runner.requestSnapshot();
-            return;
+    public boolean hasJoinedSimulation() {
+        return joinedSimulationId != null;
+    }
+
+    public String getFormattedClientLabel() {
+        return TERMINAL_UI_STATE.formatClient(clientId);
+    }
+
+    public void requestSnapshot() {
+        if (runner == null) {
+            throw new IllegalStateException("snapshot requires an attached simulation");
         }
 
-        SimulationAugmentation augmentation = toAugmentation(userInput);
-        if (augmentation == null) {
-            return;
-        }
+        runner.requestSnapshot();
+    }
 
+    public void requestSimulationInput(SimulationAugmentation augmentation) {
         SimulationId simulationId = joinedSimulationId;
         if (simulationId == null) {
-            System.out.println("Client " + TERMINAL_UI_STATE.formatClient(clientId) + " is still waiting for an initial snapshot");
-            return;
+            throw new IllegalStateException("simulation input requires a joined simulation");
         }
 
-        transport.send(new SimulationInputRequestDTO(simulationId, augmentation), true);
+        SimulationAugmentation validatedAugmentation = Objects.requireNonNull(augmentation, "augmentation");
+        transport.send(new SimulationInputRequestDTO(simulationId, validatedAugmentation), true);
 
         System.out.println(
             "Client " + TERMINAL_UI_STATE.formatClient(clientId)
@@ -202,9 +208,11 @@ public final class ClientApplication {
                     tickSyncMessage.getServerTick(),
                     transport.getCurrentTick(),
                     observedTransportDelayTicks,
-                    pacingAdjustmentCredit
+                    pacingAdjustmentCredit,
+                    tickSyncMessage.getTickControl()
                 )
             );
+            tickControl = tickSyncMessage.getTickControl();
             queueChecksum(tickSyncMessage);
         }
     }
@@ -272,6 +280,10 @@ public final class ClientApplication {
         TickSyncState tickSyncState = tickSyncStatesBySimulation.get(activeSimulationId);
         if (tickSyncState == null) {
             return 1;
+        }
+
+        if (tickSyncState.tickControl.isManual()) {
+            return Math.max(0, tickSyncState.serverTick - ticker.getTick());
         }
 
         int estimatedServerTick = tickSyncState.estimateCurrentServerTick(transport.getCurrentTick());
@@ -370,34 +382,25 @@ public final class ClientApplication {
         return TERMINAL_UI_STATE.formatSimulation(requestedSimulationId);
     }
 
-    private static SimulationAugmentation toAugmentation(CustomUserInput userInput) {
-        if (userInput.isIncrement()) {
-            return new SimulationAugmentation(1);
-        }
-
-        if (userInput.isDecrement()) {
-            return new SimulationAugmentation(-1);
-        }
-
-        return null;
-    }
-
     private static final class TickSyncState {
         private final int serverTick;
         private final int observedAtTransportTick;
         private final int observedTransportDelayTicks;
+        private final TickControl tickControl;
         private double pacingAdjustmentCredit;
 
         private TickSyncState(
             int serverTick,
             int observedAtTransportTick,
             int observedTransportDelayTicks,
-            double pacingAdjustmentCredit
+            double pacingAdjustmentCredit,
+            TickControl tickControl
         ) {
             this.serverTick = serverTick;
             this.observedAtTransportTick = observedAtTransportTick;
             this.observedTransportDelayTicks = observedTransportDelayTicks;
             this.pacingAdjustmentCredit = pacingAdjustmentCredit;
+            this.tickControl = Objects.requireNonNull(tickControl, "tickControl");
         }
 
         private int estimateCurrentServerTick(int currentTransportTick) {

@@ -1,0 +1,27 @@
+package com.factoryonline.client.bootstrap.commands;
+
+import java.util.Objects;
+
+import com.factoryonline.simulation.SimulationAugmentation;
+
+public abstract class ClientTerminalCommand {
+    private ClientTerminalCommand() {
+    }
+
+    public static final class RequestSnapshot extends ClientTerminalCommand {
+        public RequestSnapshot() {
+        }
+    }
+
+    public static final class SendSimulationInput extends ClientTerminalCommand {
+        private final SimulationAugmentation augmentation;
+
+        public SendSimulationInput(SimulationAugmentation augmentation) {
+            this.augmentation = Objects.requireNonNull(augmentation, "augmentation");
+        }
+
+        public SimulationAugmentation getAugmentation() {
+            return augmentation;
+        }
+    }
+}

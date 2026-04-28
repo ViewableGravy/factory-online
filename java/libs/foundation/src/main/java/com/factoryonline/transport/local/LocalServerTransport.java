@@ -25,6 +25,11 @@ public final class LocalServerTransport implements ServerTransport {
         return transportHub.drainServerAs(ClientTransportMessageDTO.class);
     }
 
+    @Override
+    public void addMessageListener(Runnable listener) {
+        Objects.requireNonNull(listener, "listener");
+    }
+
     public void send(ClientId clientId, TransportMessage message) {
         transportHub.sendToClient(clientId, message);
     }

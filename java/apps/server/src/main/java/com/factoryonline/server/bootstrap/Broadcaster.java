@@ -11,6 +11,7 @@ import com.factoryonline.foundation.ids.SimulationId;
 import com.factoryonline.foundation.protocol.ProtocolDTO;
 import com.factoryonline.foundation.protocol.SimulationUpdateDTO;
 import com.factoryonline.foundation.protocol.TickSyncMessageDTO;
+import com.factoryonline.foundation.timing.TickControl;
 import com.factoryonline.simulation.SimulationAugmentation;
 import com.factoryonline.transport.ServerTransport;
 
@@ -41,10 +42,13 @@ public final class Broadcaster {
         sendToSubscribers(validatedSimulationId, new SimulationUpdateDTO(validatedSimulationId, augmentation, tick));
     }
 
-    public void broadcastTickSync(SimulationId simulationId, int serverTick, int serverChecksum) {
+    public void broadcastTickSync(SimulationId simulationId, int serverTick, int serverChecksum, TickControl tickControl) {
         SimulationId validatedSimulationId = Objects.requireNonNull(simulationId, "simulationId");
+        TickControl validatedTickControl = Objects.requireNonNull(tickControl, "tickControl");
 
-        sendToSubscribers(validatedSimulationId, new TickSyncMessageDTO(validatedSimulationId, serverTick, serverChecksum));
+        sendToSubscribers(
+            validatedSimulationId,
+            new TickSyncMessageDTO(validatedSimulationId, serverTick, serverChecksum, validatedTickControl));
     }
 
     private void sendToSubscribers(SimulationId simulationId, ProtocolDTO<?> payload) {

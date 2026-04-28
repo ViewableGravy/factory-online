@@ -25,6 +25,16 @@ public final class LocalClientTransport implements ClientTransport {
         transportHub.sendToServer(clientId, message, delayed);
     }
 
+    @Override
+    public void advanceTick() {
+        transportHub.advanceTick();
+    }
+
+    @Override
+    public void addMessageListener(Runnable listener) {
+        Objects.requireNonNull(listener, "listener");
+    }
+
     public int getCurrentTick() {
         return transportHub.getCurrentTick();
     }

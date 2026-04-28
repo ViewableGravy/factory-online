@@ -29,6 +29,7 @@ public final class TcpClientTransport implements ClientTransport, AutoCloseable 
     private final AtomicInteger currentTick = new AtomicInteger();
     private final Object writeMonitor = new Object();
     private final List<ProtocolDTOContainer> queuedDtos = new ArrayList<>();
+    private final List<Runnable> messageListeners = new ArrayList<>();
 
     private volatile boolean closed;
 
@@ -58,8 +59,16 @@ public final class TcpClientTransport implements ClientTransport, AutoCloseable 
         return currentTick.get();
     }
 
+    @Override
     public void advanceTick() {
         currentTick.incrementAndGet();
+    }
+
+    @Override
+    public void addMessageListener(Runnable listener) {
+        synchronized (messageListeners) {
+            messageListeners.add(Objects.requireNonNull(listener, "listener"));
+        }
     }
 
     @Override
@@ -128,6 +137,7 @@ public final class TcpClientTransport implements ClientTransport, AutoCloseable 
                 synchronized (queuedDtos) {
                     queuedDtos.add(container);
                 }
+                notifyMessageListeners();
             }
         } catch (IOException exception) {
             if (!closed) {
@@ -149,6 +159,17 @@ public final class TcpClientTransport implements ClientTransport, AutoCloseable 
             } catch (IOException exception) {
                 throw new IllegalStateException("Failed to send client transport message", exception);
             }
+        }
+    }
+
+    private void notifyMessageListeners() {
+        List<Runnable> listeners;
+        synchronized (messageListeners) {
+            listeners = List.copyOf(messageListeners);
+        }
+
+        for (Runnable listener : listeners) {
+            listener.run();
         }
     }
 

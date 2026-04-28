@@ -27,6 +27,7 @@ public final class TcpServerTransport implements ServerTransport, AutoCloseable 
     private final Thread acceptThread;
     private final List<ClientTransportMessage> queuedMessages = new ArrayList<>();
     private final Map<ClientId, ClientConnection> connectionsByClientId = new HashMap<>();
+    private final List<Runnable> messageListeners = new ArrayList<>();
 
     private volatile boolean closed;
 
@@ -43,6 +44,13 @@ public final class TcpServerTransport implements ServerTransport, AutoCloseable 
             List<ClientTransportMessage> drainedMessages = List.copyOf(queuedMessages);
             queuedMessages.clear();
             return drainedMessages;
+        }
+    }
+
+    @Override
+    public void addMessageListener(Runnable listener) {
+        synchronized (messageListeners) {
+            messageListeners.add(Objects.requireNonNull(listener, "listener"));
         }
     }
 
@@ -114,6 +122,18 @@ public final class TcpServerTransport implements ServerTransport, AutoCloseable 
     private void enqueue(ClientTransportMessage message) {
         synchronized (queuedMessages) {
             queuedMessages.add(message);
+        }
+        notifyMessageListeners();
+    }
+
+    private void notifyMessageListeners() {
+        List<Runnable> listeners;
+        synchronized (messageListeners) {
+            listeners = List.copyOf(messageListeners);
+        }
+
+        for (Runnable listener : listeners) {
+            listener.run();
         }
     }
 

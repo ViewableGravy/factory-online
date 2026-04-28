@@ -10,6 +10,10 @@ public interface ClientTransport {
 
     void send(TransportMessage message, boolean delayed);
 
+    void advanceTick();
+
+    void addMessageListener(Runnable listener);
+
     default void send(ProtocolDTO<?> dto, boolean delayed) {
         send(new TransportMessage(dto), delayed);
     }

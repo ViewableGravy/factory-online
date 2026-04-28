@@ -9,6 +9,8 @@ import com.factoryonline.foundation.protocol.ProtocolDTO;
 public interface ServerTransport {
     List<ClientTransportMessage> drainMessages();
 
+    void addMessageListener(Runnable listener);
+
     void send(ClientId clientId, TransportMessage message);
 
     default void send(ClientId clientId, ProtocolDTO<?> dto) {
