@@ -35,6 +35,7 @@ public final class ServerApplication {
 
     private final ServerTransport transport;
     private final Ticker ticker;
+    private final ServerTickController tickController;
     private final BatchedSimulationRunner runner;
     private final SimulationRegistry registry;
     private final Broadcaster broadcaster;
@@ -42,18 +43,31 @@ public final class ServerApplication {
     private final Map<ClientId, Session> sessionsByClientId = new HashMap<>();
     private final Map<Integer, List<BufferedSimulationInput>> bufferedInputsByTick = new HashMap<>();
     private final Map<Integer, Map<SimulationId, Simulation>> validationSimulationsByTick = new HashMap<>();
-    private TickControl tickControl = TickControl.automatic(RuntimeTiming.TICK_INTERVAL_MILLIS);
-    private int requestedManualTicks;
     private int pendingSimulationTick = -1;
 
     public ServerApplication(ServerTransport transport) {
-        this.transport = Objects.requireNonNull(transport, "transport");
+        this(builder()
+            .transport(transport)
+            .ticker(new Ticker())
+            .tickController(ServerTickController.automatic())
+            .runner(new BatchedSimulationRunner(2, "server"))
+            .registry(new SimulationRegistry())
+            .broadcaster(new Broadcaster(transport))
+            .simulationIdFactory(new SimulationIdFactory()));
+    }
 
-        this.ticker = new Ticker();
-        this.runner = new BatchedSimulationRunner(2, "server");
-        this.registry = new SimulationRegistry();
-        this.broadcaster = new Broadcaster(transport);
-        this.simulationIdFactory = new SimulationIdFactory();
+    private ServerApplication(Builder builder) {
+        this.transport = Objects.requireNonNull(builder.transport, "transport");
+        this.ticker = Objects.requireNonNull(builder.ticker, "ticker");
+        this.tickController = Objects.requireNonNull(builder.tickController, "tickController");
+        this.runner = Objects.requireNonNull(builder.runner, "runner");
+        this.registry = Objects.requireNonNull(builder.registry, "registry");
+        this.broadcaster = Objects.requireNonNull(builder.broadcaster, "broadcaster");
+        this.simulationIdFactory = Objects.requireNonNull(builder.simulationIdFactory, "simulationIdFactory");
+    }
+
+    public static Builder builder() {
+        return new Builder();
     }
 
     public ServerApplication configureDefault() {
@@ -85,23 +99,13 @@ public final class ServerApplication {
         pendingSimulationTick = -1;
     }
 
-    public synchronized TickControl getTickControl() {
-        return tickControl;
-    }
-
-    public synchronized int drainRequestedManualTicks() {
-        int bufferedRequestedTicks = requestedManualTicks;
-        requestedManualTicks = 0;
-        return bufferedRequestedTicks;
+    private synchronized TickControl getTickControl() {
+        return tickController.getTickControl();
     }
 
     public void cleanup() {
         ticker.shutdown();
         runner.close();
-    }
-
-    public boolean isManualTickMode() {
-        return getTickControl().isManual();
     }
 
     public boolean hasActiveSession() {
@@ -116,45 +120,6 @@ public final class ServerApplication {
         Simulation simulation = new Simulation(simulationIdFactory.create());
         registerSimulation(simulation);
         return simulation.getId();
-    }
-
-    public void queueManualTicks(int requestedTicks) {
-        if (requestedTicks <= 0) {
-            throw new IllegalArgumentException("requestedTicks must be positive");
-        }
-
-        synchronized (this) {
-            if (!tickControl.isManual()) {
-                throw new IllegalStateException("manual ticks require manual tick mode");
-            }
-
-            requestedManualTicks += requestedTicks;
-        }
-    }
-
-    public TickControl setTickMode(com.factoryonline.foundation.timing.TickMode nextMode) {
-        synchronized (this) {
-            tickControl = tickControl.withMode(Objects.requireNonNull(nextMode, "nextMode"));
-            if (nextMode == com.factoryonline.foundation.timing.TickMode.AUTOMATIC) {
-                requestedManualTicks = 0;
-            }
-        }
-
-        broadcastCurrentTickState(currentSnapshotTick());
-        return getTickControl();
-    }
-
-    public TickControl setTickIntervalMillis(int tickIntervalMillis) {
-        if (tickIntervalMillis <= 0) {
-            throw new IllegalArgumentException("tickIntervalMillis must be positive");
-        }
-
-        synchronized (this) {
-            tickControl = tickControl.withTickIntervalMillis(tickIntervalMillis);
-        }
-
-        broadcastCurrentTickState(currentSnapshotTick());
-        return getTickControl();
     }
 
     public void queueServerSimulationInput(SimulationAugmentation augmentation) {
@@ -184,6 +149,10 @@ public final class ServerApplication {
                 + " input for tick "
                 + targetTick
                 + " on " + TERMINAL_UI_STATE.formatSimulation(serverSession.getSimulationId()));
+    }
+
+    public void broadcastCurrentTickControlState() {
+        broadcastCurrentTickState(currentSnapshotTick());
     }
 
     private void dispatchClientMessage(ClientTransportMessage clientMessage) {
@@ -374,6 +343,82 @@ public final class ServerApplication {
         private BufferedSimulationInput(Session session, SimulationAugmentation augmentation) {
             this.session = Objects.requireNonNull(session, "session");
             this.augmentation = Objects.requireNonNull(augmentation, "augmentation");
+        }
+    }
+
+    public static final class Builder {
+        private ServerTransport transport;
+        private Ticker ticker;
+        private ServerTickController tickController;
+        private BatchedSimulationRunner runner;
+        private SimulationRegistry registry;
+        private Broadcaster broadcaster;
+        private SimulationIdFactory simulationIdFactory;
+
+        private Builder() {
+        }
+
+        public Builder transport(ServerTransport transport) {
+            this.transport = Objects.requireNonNull(transport, "transport");
+            return this;
+        }
+
+        public Builder ticker(Ticker ticker) {
+            this.ticker = Objects.requireNonNull(ticker, "ticker");
+            return this;
+        }
+
+        public Builder tickController(ServerTickController tickController) {
+            this.tickController = Objects.requireNonNull(tickController, "tickController");
+            return this;
+        }
+
+        public Builder runner(BatchedSimulationRunner runner) {
+            this.runner = Objects.requireNonNull(runner, "runner");
+            return this;
+        }
+
+        public Builder registry(SimulationRegistry registry) {
+            this.registry = Objects.requireNonNull(registry, "registry");
+            return this;
+        }
+
+        public Builder broadcaster(Broadcaster broadcaster) {
+            this.broadcaster = Objects.requireNonNull(broadcaster, "broadcaster");
+            return this;
+        }
+
+        public Builder simulationIdFactory(SimulationIdFactory simulationIdFactory) {
+            this.simulationIdFactory = Objects.requireNonNull(simulationIdFactory, "simulationIdFactory");
+            return this;
+        }
+
+        public ServerApplication build() {
+            if (ticker == null) {
+                ticker = new Ticker();
+            }
+
+            if (tickController == null) {
+                tickController = ServerTickController.automatic();
+            }
+
+            if (runner == null) {
+                runner = new BatchedSimulationRunner(2, "server");
+            }
+
+            if (registry == null) {
+                registry = new SimulationRegistry();
+            }
+
+            if (broadcaster == null && transport != null) {
+                broadcaster = new Broadcaster(transport);
+            }
+
+            if (simulationIdFactory == null) {
+                simulationIdFactory = new SimulationIdFactory();
+            }
+
+            return new ServerApplication(this);
         }
     }
 }

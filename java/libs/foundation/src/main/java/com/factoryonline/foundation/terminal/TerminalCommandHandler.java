@@ -107,6 +107,9 @@ public final class TerminalCommandHandler implements Closeable {
         return new TreeCompleter(
             node(TerminalCommands.SNAPSHOT_COMMAND),
             node(TerminalCommands.ADD_SIMULATION_COMMAND),
+            node(TerminalCommands.TICK_COMMAND),
+            node(TerminalCommands.TICK_MODE_COMMAND),
+            node(TerminalCommands.TICK_RATE_COMMAND),
             node(
                 TerminalCommands.SERVER_COMMAND_PREFIX,
                 node(TerminalCommands.INCREMENT_COMMAND),

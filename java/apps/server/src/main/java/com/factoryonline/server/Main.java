@@ -3,31 +3,56 @@ package com.factoryonline.server;
 import java.io.IOException;
 
 import com.factoryonline.foundation.config.NetworkConfig;
+import com.factoryonline.foundation.config.RuntimeTiming;
 import com.factoryonline.foundation.config.TerminalCommands;
 import com.factoryonline.foundation.terminal.TerminalCommandHandler;
+import com.factoryonline.foundation.timing.TickControl;
+import com.factoryonline.server.bootstrap.BatchedSimulationRunner;
+import com.factoryonline.server.bootstrap.Broadcaster;
 import com.factoryonline.server.bootstrap.ServerApplication;
 import com.factoryonline.server.bootstrap.ServerRuntimeLoop;
+import com.factoryonline.server.bootstrap.ServerTickController;
+import com.factoryonline.server.bootstrap.SimulationIdFactory;
 import com.factoryonline.server.bootstrap.TerminalUiState;
+import com.factoryonline.server.bootstrap.Ticker;
+import com.factoryonline.simulation.SimulationRegistry;
 import com.factoryonline.transport.tcp.TcpServerTransport;
 
 public final class Main {
-    private static ServerApplication server;
-    private static ServerRuntimeLoop loop;
-
     private Main() {
     }
 
     public static void main(String[] args) throws IOException {
+        ServerApplication server = null;
+        ServerRuntimeLoop loop = null;
+
         try (TcpServerTransport transport = new TcpServerTransport(NetworkConfig.DEFAULT_PORT)) {
-            server = new ServerApplication(transport).configureDefault();
-            loop = new ServerRuntimeLoop(server, transport);
+            Ticker ticker = new Ticker();
+            ServerTickController tickController = new ServerTickController(TickControl.automatic(RuntimeTiming.TICK_INTERVAL_MILLIS));
+            SimulationRegistry registry = new SimulationRegistry();
+            BatchedSimulationRunner runner = new BatchedSimulationRunner(2, "server");
+            Broadcaster broadcaster = new Broadcaster(transport);
+            SimulationIdFactory simulationIdFactory = new SimulationIdFactory();
+            TerminalCommandHandler commandHandler = TerminalCommandHandler.createServerHandler();
+
+            server = ServerApplication.builder()
+                .transport(transport)
+                .ticker(ticker)
+                .tickController(tickController)
+                .registry(registry)
+                .runner(runner)
+                .broadcaster(broadcaster)
+                .simulationIdFactory(simulationIdFactory)
+                .build()
+                .configureDefault();
+
+            loop = new ServerRuntimeLoop(server, tickController, transport);
 
             loop.start();
 
             System.out.println(
                 TerminalUiState.getInstance().formatServerLabel() + " listening on port " + NetworkConfig.DEFAULT_PORT);
 
-            TerminalCommandHandler commandHandler = TerminalCommandHandler.createServerHandler();
             String rawCommand;
 
             while ((rawCommand = commandHandler.readCommand(prompt())) != null) {
@@ -42,8 +67,13 @@ public final class Main {
                 }
             }
         } finally {
-            loop.stop();
-            server.cleanup();
+            if (loop != null) {
+                loop.stop();
+            }
+
+            if (server != null) {
+                server.cleanup();
+            }
         }
     }
 

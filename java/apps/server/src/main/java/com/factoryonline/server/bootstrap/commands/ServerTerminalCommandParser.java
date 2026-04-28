@@ -31,19 +31,23 @@ public final class ServerTerminalCommandParser {
             return Result.command(new ServerTerminalCommand.AddSimulation());
         }
 
-        if (normalizedCommand.startsWith(TerminalCommands.TICK_COMMAND)) {
-            return parseTickCommand(normalizedCommand);
-        }
-
-        if (normalizedCommand.startsWith(TerminalCommands.TICK_MODE_COMMAND)) {
+        if (startsWithCommand(normalizedCommand, TerminalCommands.TICK_MODE_COMMAND)) {
             return parseTickModeCommand(normalizedCommand);
         }
 
-        if (normalizedCommand.startsWith(TerminalCommands.TICK_RATE_COMMAND)) {
+        if (startsWithCommand(normalizedCommand, TerminalCommands.TICK_RATE_COMMAND)) {
             return parseTickRateCommand(normalizedCommand);
         }
 
+        if (startsWithCommand(normalizedCommand, TerminalCommands.TICK_COMMAND)) {
+            return parseTickCommand(normalizedCommand);
+        }
+
         return Result.invalid("Server ignored unknown command: " + normalizedCommand);
+    }
+
+    private static boolean startsWithCommand(String normalizedCommand, String command) {
+        return normalizedCommand.equals(command) || normalizedCommand.startsWith(command + " ");
     }
 
     private Result parseServerSimulationCommand(String serverCommand) {

@@ -4,11 +4,13 @@ import java.util.Objects;
 
 import com.factoryonline.foundation.config.TerminalCommands;
 import com.factoryonline.server.bootstrap.ServerApplication;
+import com.factoryonline.server.bootstrap.ServerTickController;
 
 public final class ServerTerminalCommandValidator {
-    public Result validate(ServerTerminalCommand command, ServerApplication server) {
+    public Result validate(ServerTerminalCommand command, ServerApplication server, ServerTickController tickController) {
         ServerTerminalCommand validatedCommand = Objects.requireNonNull(command, "command");
         ServerApplication validatedServer = Objects.requireNonNull(server, "server");
+        ServerTickController validatedTickController = Objects.requireNonNull(tickController, "tickController");
 
         if (validatedCommand instanceof ServerTerminalCommand.QueueManualTicks) {
             ServerTerminalCommand.QueueManualTicks queueManualTicks = (ServerTerminalCommand.QueueManualTicks) validatedCommand;
@@ -16,7 +18,7 @@ public final class ServerTerminalCommandValidator {
                 return Result.invalid("Tick count must be positive");
             }
 
-            if (!validatedServer.isManualTickMode()) {
+            if (!validatedTickController.isManualTickMode()) {
                 return Result.invalid(
                     "Server rejected tick request: switch to manual mode first with "
                         + TerminalCommands.TICK_MODE_USAGE);

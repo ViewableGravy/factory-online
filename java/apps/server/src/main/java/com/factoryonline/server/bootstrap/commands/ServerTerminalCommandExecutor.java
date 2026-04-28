@@ -5,14 +5,16 @@ import java.util.Objects;
 import com.factoryonline.foundation.ids.SimulationId;
 import com.factoryonline.foundation.timing.TickControl;
 import com.factoryonline.server.bootstrap.ServerApplication;
+import com.factoryonline.server.bootstrap.ServerTickController;
 import com.factoryonline.server.bootstrap.TerminalUiState;
 
 public final class ServerTerminalCommandExecutor {
     private static final TerminalUiState TERMINAL_UI_STATE = TerminalUiState.getInstance();
 
-    public void execute(ServerTerminalCommand command, ServerApplication server) {
+    public void execute(ServerTerminalCommand command, ServerApplication server, ServerTickController tickController) {
         ServerTerminalCommand validatedCommand = Objects.requireNonNull(command, "command");
         ServerApplication validatedServer = Objects.requireNonNull(server, "server");
+        ServerTickController validatedTickController = Objects.requireNonNull(tickController, "tickController");
 
         if (validatedCommand instanceof ServerTerminalCommand.RequestSnapshot) {
             validatedServer.requestSnapshot();
@@ -31,7 +33,7 @@ public final class ServerTerminalCommandExecutor {
 
         if (validatedCommand instanceof ServerTerminalCommand.QueueManualTicks) {
             ServerTerminalCommand.QueueManualTicks queueManualTicks = (ServerTerminalCommand.QueueManualTicks) validatedCommand;
-            validatedServer.queueManualTicks(queueManualTicks.getCount());
+            validatedTickController.queueManualTicks(queueManualTicks.getCount());
             System.out.println(
                 TERMINAL_UI_STATE.formatServerLabel()
                     + " queued "
@@ -43,7 +45,8 @@ public final class ServerTerminalCommandExecutor {
 
         if (validatedCommand instanceof ServerTerminalCommand.UpdateTickMode) {
             ServerTerminalCommand.UpdateTickMode updateTickMode = (ServerTerminalCommand.UpdateTickMode) validatedCommand;
-            TickControl tickControl = validatedServer.setTickMode(updateTickMode.getTickMode());
+            TickControl tickControl = validatedTickController.setTickMode(updateTickMode.getTickMode());
+            validatedServer.broadcastCurrentTickControlState();
             System.out.println(
                 TERMINAL_UI_STATE.formatServerLabel()
                     + " switched tick mode to "
@@ -56,7 +59,8 @@ public final class ServerTerminalCommandExecutor {
 
         if (validatedCommand instanceof ServerTerminalCommand.UpdateTickRate) {
             ServerTerminalCommand.UpdateTickRate updateTickRate = (ServerTerminalCommand.UpdateTickRate) validatedCommand;
-            TickControl tickControl = validatedServer.setTickIntervalMillis(updateTickRate.getTickIntervalMillis());
+            TickControl tickControl = validatedTickController.setTickIntervalMillis(updateTickRate.getTickIntervalMillis());
+            validatedServer.broadcastCurrentTickControlState();
             System.out.println(
                 TERMINAL_UI_STATE.formatServerLabel()
                     + " set tick interval to "

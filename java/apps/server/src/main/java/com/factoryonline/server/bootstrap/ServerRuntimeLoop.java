@@ -15,6 +15,7 @@ import com.factoryonline.transport.ServerTransport;
 
 public final class ServerRuntimeLoop {
     private final ServerApplication server;
+    private final ServerTickController tickController;
     private final Queue<String> queuedInputs = new ConcurrentLinkedQueue<>();
     private final Queue<ServerTerminalCommand> queuedCommands = new ConcurrentLinkedQueue<>();
     private final ServerTerminalCommandParser parser = new ServerTerminalCommandParser();
@@ -25,8 +26,9 @@ public final class ServerRuntimeLoop {
     private long wakeVersion;
     private Thread loopThread;
 
-    public ServerRuntimeLoop(ServerApplication server, ServerTransport transport) {
+    public ServerRuntimeLoop(ServerApplication server, ServerTickController tickController, ServerTransport transport) {
         this.server = Objects.requireNonNull(server, "server");
+        this.tickController = Objects.requireNonNull(tickController, "tickController");
         Objects.requireNonNull(transport, "transport").addMessageListener(this::signalWorkAvailable);
     }
 
@@ -65,7 +67,7 @@ public final class ServerRuntimeLoop {
 
     private void runLoop() {
         while (running.get()) {
-            TickControl tickControl = server.getTickControl();
+            TickControl tickControl = tickController.getTickControl();
             boolean timedWake = awaitWake(tickControl);
             if (!running.get()) {
                 return;
@@ -75,9 +77,9 @@ public final class ServerRuntimeLoop {
             executeQueuedCommands();
             server.processIncomingMessages();
 
-            TickControl updatedTickControl = server.getTickControl();
+            TickControl updatedTickControl = tickController.getTickControl();
             if (updatedTickControl.isManual()) {
-                int requestedTicks = server.drainRequestedManualTicks();
+                int requestedTicks = tickController.drainRequestedManualTicks();
                 for (int tickIndex = 0; tickIndex < requestedTicks; tickIndex += 1) {
                     server.advanceTick();
                     server.simulateCurrentTick();
@@ -140,7 +142,7 @@ public final class ServerRuntimeLoop {
     private void drainCommands() {
         ServerTerminalCommand command;
         while ((command = queuedCommands.poll()) != null) {
-            executor.execute(command, server);
+            executor.execute(command, server, tickController);
         }
     }
 
@@ -156,7 +158,7 @@ public final class ServerRuntimeLoop {
             }
 
             ServerTerminalCommand command = parseResult.getCommand();
-            ServerTerminalCommandValidator.Result validationResult = validator.validate(command, server);
+            ServerTerminalCommandValidator.Result validationResult = validator.validate(command, server, tickController);
             if (!validationResult.isValid()) {
                 System.out.println(validationResult.getMessage());
                 continue;
