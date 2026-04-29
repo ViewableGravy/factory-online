@@ -238,7 +238,7 @@ public final class ClientApplication {
 
         System.out.println(
             "Client " + TERMINAL_UI_STATE.formatClient(clientId)
-                + " attached " + TERMINAL_UI_STATE.formatSimulation(bufferedSimulation.getId())
+                + " attached " + TERMINAL_UI_STATE.formatSimulation(bufferedSimulation.id)
                 + " at snapshot tick " + initialState.tick
                 + " with startup buffer " + RuntimeTiming.CLIENT_TARGET_LOCAL_BUFFER_TICKS);
     }

@@ -3,21 +3,13 @@ package com.factoryonline.simulation;
 import java.util.Objects;
 
 public final class SimulationSnapshot {
-    private final int value;
-    private final SimulationDirection direction;
+    public final int value;
+    public final SimulationDirection direction;
 
     public SimulationSnapshot(int value, SimulationDirection direction) {
         validateValue(value);
         this.value = value;
         this.direction = Objects.requireNonNull(direction, "direction");
-    }
-
-    public int getValue() {
-        return value;
-    }
-
-    public SimulationDirection getDirection() {
-        return direction;
     }
 
     @Override

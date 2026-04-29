@@ -42,7 +42,7 @@ public final class TerminalUiState {
     public synchronized boolean selectClient(String rawSelection) {
         String selection = requireNonBlank(rawSelection, "rawSelection").trim();
         for (ClientId clientId : displaysByClientId.keySet()) {
-            if (clientId.value().equalsIgnoreCase(selection) || clientId.value().endsWith(selection)) {
+            if (clientId.value.equalsIgnoreCase(selection) || clientId.value.endsWith(selection)) {
                 selectedClientId = clientId;
                 return true;
             }
@@ -85,22 +85,22 @@ public final class TerminalUiState {
         ClientId validatedClientId = Objects.requireNonNull(clientId, "clientId");
         ClientDisplay display = displaysByClientId.get(validatedClientId);
         if (display == null) {
-            return colorize(validatedClientId.value(), ANSI_DEFAULT_SIMULATION);
+            return colorize(validatedClientId.value, ANSI_DEFAULT_SIMULATION);
         }
 
-        return colorize(validatedClientId.value(), display.color);
+        return colorize(validatedClientId.value, display.color);
     }
 
     public synchronized String formatSimulation(SimulationId simulationId) {
         SimulationId validatedSimulationId = Objects.requireNonNull(simulationId, "simulationId");
         return colorize(
-            validatedSimulationId.value(),
+            validatedSimulationId.value,
             colorsBySimulationId.getOrDefault(validatedSimulationId, ANSI_DEFAULT_SIMULATION));
     }
 
     public synchronized String formatSimulationThreadTag(SimulationId simulationId) {
         SimulationId validatedSimulationId = Objects.requireNonNull(simulationId, "simulationId");
-        String rawTag = "[name: " + validatedSimulationId.value() + "]";
+        String rawTag = "[name: " + validatedSimulationId.value + "]";
         return colorize(rawTag, colorsBySimulationId.getOrDefault(validatedSimulationId, ANSI_DEFAULT_SIMULATION));
     }
 

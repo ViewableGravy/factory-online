@@ -66,7 +66,7 @@ public final class LoopCadence {
     }
 
     private static void configureInterval(TickControl tickControl) {
-        int nextTickIntervalMillis = tickControl.getTickIntervalMillis();
+        int nextTickIntervalMillis = tickControl.tickIntervalMillis;
         if (tickIntervalMillis == nextTickIntervalMillis) {
             return;
         }

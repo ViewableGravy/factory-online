@@ -47,7 +47,7 @@ public final class SimulationIdFactory {
     }
 
     private void updateNextAutoId(SimulationId simulationId) {
-        String value = simulationId.value();
+        String value = simulationId.value;
         if (!value.startsWith(autoPrefix)) {
             return;
         }

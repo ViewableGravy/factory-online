@@ -11,7 +11,7 @@ public final class Simulation {
     private static final String ANSI_RESET = "\u001B[0m";
     private static final TerminalUiState TERMINAL_UI_STATE = TerminalUiState.getInstance();
 
-    private final SimulationId id;
+    public final SimulationId id;
     private final SimulationState state;
 
     public Simulation(String name) {
@@ -35,12 +35,8 @@ public final class Simulation {
         this.state = Objects.requireNonNull(state, "state");
     }
 
-    public SimulationId getId() {
-        return id;
-    }
-
     public String getName() {
-        return id.value();
+        return id.value;
     }
 
     public void run(int updateTick, boolean logThisTick) {
@@ -71,7 +67,7 @@ public final class Simulation {
     public SimulationActionResult applyAction(SimulationAugmentation augmentation) {
         Objects.requireNonNull(augmentation, "augmentation");
 
-        boolean wasApplied = state.applyAugmentation(augmentation.getValueDelta());
+        boolean wasApplied = state.applyAugmentation(augmentation.valueDelta);
         if (!wasApplied) {
             return SimulationActionResult.error(
                 "augmentation would move simulation outside bounds for " + id);

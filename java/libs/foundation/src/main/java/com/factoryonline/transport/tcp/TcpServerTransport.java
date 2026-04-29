@@ -15,10 +15,9 @@ import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.factoryonline.foundation.ids.ClientId;
-import com.factoryonline.transport.commands.ClientTransportCommand;
-import com.factoryonline.transport.commands.ProtocolCommand;
 import com.factoryonline.transport.ServerTransport;
 import com.factoryonline.transport.TransportMessage;
+import com.factoryonline.transport.commands.ClientTransportCommand;
 import com.factoryonline.transport.kryo.KryoStreams;
 
 public final class TcpServerTransport implements ServerTransport, AutoCloseable {
@@ -164,7 +163,7 @@ public final class TcpServerTransport implements ServerTransport, AutoCloseable 
         synchronized (connectionsByClientId) {
             ClientConnection connection = connectionsByClientId.get(validatedClientId);
             if (connection == null) {
-                throw new IllegalArgumentException("Unknown client: " + validatedClientId.value());
+                throw new IllegalArgumentException("Unknown client: " + validatedClientId.value);
             }
 
             return connection;
@@ -253,11 +252,11 @@ public final class TcpServerTransport implements ServerTransport, AutoCloseable 
         private void send(TransportMessage message) {
             synchronized (writeMonitor) {
                 if (connectionClosed) {
-                    throw new IllegalStateException("Connection is closed for client " + clientId.value());
+                    throw new IllegalStateException("Connection is closed for client " + clientId.value);
                 }
 
                 try {
-                    kryo.writeClassAndObject(output, Objects.requireNonNull(message, "message").getPayload());
+                    kryo.writeClassAndObject(output, Objects.requireNonNull(message, "message").payload);
                     output.flush();
                 } catch (KryoException exception) {
                     throw new IllegalStateException("Failed to send server transport message", exception);

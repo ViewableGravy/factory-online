@@ -36,40 +36,40 @@ public final class ServerTerminalCommandExecutor {
 
         if (validatedCommand instanceof ServerTerminalCommand.QueueManualTicks) {
             ServerTerminalCommand.QueueManualTicks queueManualTicks = (ServerTerminalCommand.QueueManualTicks) validatedCommand;
-            validatedTickController.queueManualTicks(queueManualTicks.getCount());
+            validatedTickController.queueManualTicks(queueManualTicks.count);
             System.out.println(
                 TERMINAL_UI_STATE.formatServerLabel()
                     + " queued "
-                    + queueManualTicks.getCount()
+                    + queueManualTicks.count
                     + " manual tick"
-                    + (queueManualTicks.getCount() == 1 ? "" : "s"));
+                    + (queueManualTicks.count == 1 ? "" : "s"));
             return;
         }
 
         if (validatedCommand instanceof ServerTerminalCommand.UpdateTickMode) {
             ServerTerminalCommand.UpdateTickMode updateTickMode = (ServerTerminalCommand.UpdateTickMode) validatedCommand;
-            TickControl tickControl = validatedTickController.setTickMode(updateTickMode.getTickMode());
+            TickControl tickControl = validatedTickController.setTickMode(updateTickMode.tickMode);
             validatedServer.broadcastCurrentTickControlState();
             System.out.println(
                 TERMINAL_UI_STATE.formatServerLabel()
                     + " switched tick mode to "
-                    + tickControl.getMode().protocolValue()
+                    + tickControl.mode.protocolValue
                     + " at "
-                    + tickControl.getTickIntervalMillis()
+                    + tickControl.tickIntervalMillis
                     + " ms");
             return;
         }
 
         if (validatedCommand instanceof ServerTerminalCommand.UpdateTickRate) {
             ServerTerminalCommand.UpdateTickRate updateTickRate = (ServerTerminalCommand.UpdateTickRate) validatedCommand;
-            TickControl tickControl = validatedTickController.setTickIntervalMillis(updateTickRate.getTickIntervalMillis());
+            TickControl tickControl = validatedTickController.setTickIntervalMillis(updateTickRate.tickIntervalMillis);
             validatedServer.broadcastCurrentTickControlState();
             System.out.println(
                 TERMINAL_UI_STATE.formatServerLabel()
                     + " set tick interval to "
-                    + tickControl.getTickIntervalMillis()
+                    + tickControl.tickIntervalMillis
                     + " ms in "
-                    + tickControl.getMode().protocolValue()
+                    + tickControl.mode.protocolValue
                     + " mode");
             return;
         }
@@ -77,7 +77,7 @@ public final class ServerTerminalCommandExecutor {
         if (validatedCommand instanceof ServerTerminalCommand.ApplyServerSimulationInput) {
             ServerTerminalCommand.ApplyServerSimulationInput applyServerSimulationInput =
                 (ServerTerminalCommand.ApplyServerSimulationInput) validatedCommand;
-            validatedServer.queueServerSimulationInput(applyServerSimulationInput.getAugmentation());
+            validatedServer.queueServerSimulationInput(applyServerSimulationInput.augmentation);
             return;
         }
 

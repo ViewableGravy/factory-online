@@ -14,7 +14,9 @@ public final class SimulationState {
     }
 
     public SimulationState(SimulationSnapshot snapshot) {
-        this(Objects.requireNonNull(snapshot, "snapshot").getValue(), snapshot.getDirection());
+        this(
+            Objects.requireNonNull(snapshot, "snapshot").value,
+            Objects.requireNonNull(snapshot, "snapshot").direction);
     }
 
     public SimulationState(int value, SimulationDirection direction) {

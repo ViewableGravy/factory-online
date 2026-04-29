@@ -1,8 +1,8 @@
 package com.factoryonline.simulation;
 
 public final class SimulationActionResult {
-    private final boolean success;
-    private final String error;
+    public final boolean success;
+    public final String error;
 
     private SimulationActionResult(boolean success, String error) {
         this.success = success;
@@ -17,11 +17,4 @@ public final class SimulationActionResult {
         return new SimulationActionResult(false, error);
     }
 
-    public boolean isSuccess() {
-        return success;
-    }
-
-    public String getError() {
-        return error;
-    }
 }

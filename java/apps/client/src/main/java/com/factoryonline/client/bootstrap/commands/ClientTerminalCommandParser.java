@@ -41,7 +41,7 @@ public final class ClientTerminalCommandParser {
     }
 
     public static final class Result {
-        private final ClientTerminalCommand command;
+        public final ClientTerminalCommand command;
 
         private Result(ClientTerminalCommand command) {
             this.command = command;
@@ -59,8 +59,5 @@ public final class ClientTerminalCommandParser {
             return command != null;
         }
 
-        public ClientTerminalCommand getCommand() {
-            return command;
-        }
     }
 }

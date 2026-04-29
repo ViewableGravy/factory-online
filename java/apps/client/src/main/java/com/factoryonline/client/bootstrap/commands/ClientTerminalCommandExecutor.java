@@ -20,7 +20,7 @@ public final class ClientTerminalCommandExecutor {
         if (validatedCommand instanceof ClientTerminalCommand.SendSimulationInput) {
             ClientTerminalCommand.SendSimulationInput sendSimulationInput =
                 (ClientTerminalCommand.SendSimulationInput) validatedCommand;
-            validatedClient.requestSimulationInput(sendSimulationInput.getAugmentation());
+            validatedClient.requestSimulationInput(sendSimulationInput.augmentation);
             return;
         }
 

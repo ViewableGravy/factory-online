@@ -26,8 +26,8 @@ public final class ClientTerminalCommandValidator {
     }
 
     public static final class Result {
-        private final boolean valid;
-        private final String message;
+        public final boolean valid;
+        public final String message;
 
         private Result(boolean valid, String message) {
             this.valid = valid;
@@ -42,12 +42,5 @@ public final class ClientTerminalCommandValidator {
             return new Result(false, Objects.requireNonNull(message, "message"));
         }
 
-        public boolean isValid() {
-            return valid;
-        }
-
-        public String getMessage() {
-            return message;
-        }
     }
 }

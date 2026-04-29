@@ -9,14 +9,11 @@ public abstract class ClientTerminalCommand {
     }
 
     public static final class SendSimulationInput extends ClientTerminalCommand {
-        private final SimulationAugmentation augmentation;
+        public final SimulationAugmentation augmentation;
 
         public SendSimulationInput(SimulationAugmentation augmentation) {
             this.augmentation = Objects.requireNonNull(augmentation, "augmentation");
         }
 
-        public SimulationAugmentation getAugmentation() {
-            return augmentation;
-        }
     }
 }

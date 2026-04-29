@@ -117,7 +117,7 @@ public final class ServerApplication {
     public SimulationId addSimulation() {
         Simulation simulation = new Simulation(simulationIdFactory.create());
         registerSimulation(simulation);
-        return simulation.getId();
+        return simulation.id;
     }
 
     public void queueServerSimulationInput(SimulationAugmentation augmentation) {
@@ -129,24 +129,24 @@ public final class ServerApplication {
         SimulationAugmentation validatedAugmentation = Objects.requireNonNull(augmentation, "augmentation");
         int targetTick = nextInputTargetTick();
         SimulationActionResult validationResult = queueValidatedInput(serverSession, validatedAugmentation, targetTick);
-        if (!validationResult.isSuccess()) {
+        if (!validationResult.success) {
             System.out.println(
                 TERMINAL_UI_STATE.formatServerLabel()
                     + " rejected "
                     + TerminalCommands.SERVER_COMMAND_PREFIX
                     + " input: "
-                    + validationResult.getError());
+                    + validationResult.error);
             return;
         }
 
-        broadcaster.broadcast(serverSession.getSimulationId(), targetTick, validatedAugmentation);
+        broadcaster.broadcast(serverSession.simulationId, targetTick, validatedAugmentation);
         System.out.println(
             TERMINAL_UI_STATE.formatServerLabel()
                 + " applied "
                 + TerminalCommands.SERVER_COMMAND_PREFIX
                 + " input for tick "
                 + targetTick
-                + " on " + TERMINAL_UI_STATE.formatSimulation(serverSession.getSimulationId()));
+                + " on " + TERMINAL_UI_STATE.formatSimulation(serverSession.simulationId));
     }
 
     public void broadcastCurrentTickControlState() {
@@ -190,7 +190,7 @@ public final class ServerApplication {
             return;
         }
 
-        SimulationId simulationId = simulation.getId();
+        SimulationId simulationId = simulation.id;
 
         Session session = new Session(clientId, simulationId);
         sessionsByClientId.put(clientId, session);
@@ -217,15 +217,15 @@ public final class ServerApplication {
             return;
         }
 
-        if (!session.getSimulationId().equals(inputRequest.simulationId)) {
+        if (!session.simulationId.equals(inputRequest.simulationId)) {
             reject(clientId, inputRequest.simulationId, "input rejected: simulation does not match session");
             return;
         }
 
         int targetTick = nextInputTargetTick();
         SimulationActionResult validationResult = queueValidatedInput(session, inputRequest.augmentation, targetTick);
-        if (!validationResult.isSuccess()) {
-            reject(clientId, inputRequest.simulationId, "input rejected: " + validationResult.getError());
+        if (!validationResult.success) {
+            reject(clientId, inputRequest.simulationId, "input rejected: " + validationResult.error);
             return;
         }
 
@@ -234,7 +234,7 @@ public final class ServerApplication {
         System.out.println(
             TERMINAL_UI_STATE.formatServerLabel() + " accepted input from " + TERMINAL_UI_STATE.formatClient(clientId)
                 + " for tick " + targetTick
-                + " on " + TERMINAL_UI_STATE.formatSimulation(session.getSimulationId()));
+                + " on " + TERMINAL_UI_STATE.formatSimulation(session.simulationId));
     }
 
     private SimulationActionResult queueValidatedInput(Session session, SimulationAugmentation augmentation, int targetTick) {
@@ -243,12 +243,12 @@ public final class ServerApplication {
 
         Simulation validationSimulation = validationSimulationsByTick
             .computeIfAbsent(targetTick, ignored -> new HashMap<>())
-            .computeIfAbsent(validatedSession.getSimulationId(), ignored -> {
-                Simulation liveSimulation = registry.get(validatedSession.getSimulationId());
-                return new Simulation(liveSimulation.getId(), liveSimulation.snapshot());
+            .computeIfAbsent(validatedSession.simulationId, ignored -> {
+                Simulation liveSimulation = registry.get(validatedSession.simulationId);
+                return new Simulation(liveSimulation.id, liveSimulation.snapshot());
             });
         SimulationActionResult validationResult = validationSimulation.applyAction(validatedAugmentation);
-        if (!validationResult.isSuccess()) {
+        if (!validationResult.success) {
             return validationResult;
         }
 
@@ -270,12 +270,12 @@ public final class ServerApplication {
         }
 
         for (BufferedSimulationInput bufferedInput : bufferedInputs) {
-            Simulation simulation = registry.get(bufferedInput.session.getSimulationId());
+            Simulation simulation = registry.get(bufferedInput.session.simulationId);
             SimulationActionResult result = simulation.applyAction(bufferedInput.augmentation);
-            if (!result.isSuccess()) {
+            if (!result.success) {
                 throw new IllegalStateException(
-                    "Buffered input failed after validation for " + bufferedInput.session.getSimulationId() + ": "
-                        + result.getError());
+                    "Buffered input failed after validation for " + bufferedInput.session.simulationId + ": "
+                        + result.error);
             }
         }
     }
@@ -331,7 +331,7 @@ public final class ServerApplication {
         TickControl currentTickControl = getTickControl();
         for (Simulation simulation : registry.all()) {
             broadcaster.broadcastTickSync(
-                simulation.getId(),
+                simulation.id,
                 tick,
                 simulation.checksum(),
                 currentTickControl);

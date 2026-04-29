@@ -8,12 +8,12 @@ import java.util.Objects;
 
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
-import com.factoryonline.transport.commands.ProtocolCommand;
-import com.factoryonline.transport.commands.SimulationUpdateCommand;
-import com.factoryonline.transport.commands.TickSyncCommand;
 import com.factoryonline.foundation.timing.TickControl;
 import com.factoryonline.simulation.SimulationAugmentation;
 import com.factoryonline.transport.ServerTransport;
+import com.factoryonline.transport.commands.ProtocolCommand;
+import com.factoryonline.transport.commands.SimulationUpdateCommand;
+import com.factoryonline.transport.commands.TickSyncCommand;
 
 public final class Broadcaster {
     private final ServerTransport transport;
@@ -66,8 +66,8 @@ public final class Broadcaster {
             } catch (IllegalArgumentException | IllegalStateException exception) {
                 unsubscribe(validatedSimulationId, clientId);
                 System.out.println(
-                    "Server removed disconnected subscriber " + clientId.value()
-                        + " from " + validatedSimulationId.value());
+                    "Server removed disconnected subscriber " + clientId.value
+                        + " from " + validatedSimulationId.value);
             }
         }
     }

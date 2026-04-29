@@ -17,7 +17,7 @@ public final class ServerTerminalCommandValidator {
 
         if (validatedCommand instanceof ServerTerminalCommand.QueueManualTicks) {
             ServerTerminalCommand.QueueManualTicks queueManualTicks = (ServerTerminalCommand.QueueManualTicks) validatedCommand;
-            if (queueManualTicks.getCount() <= 0) {
+            if (queueManualTicks.count <= 0) {
                 return Result.invalid("Tick count must be positive");
             }
 
@@ -30,7 +30,7 @@ public final class ServerTerminalCommandValidator {
 
         if (validatedCommand instanceof ServerTerminalCommand.UpdateTickRate) {
             ServerTerminalCommand.UpdateTickRate updateTickRate = (ServerTerminalCommand.UpdateTickRate) validatedCommand;
-            if (updateTickRate.getTickIntervalMillis() <= 0) {
+            if (updateTickRate.tickIntervalMillis <= 0) {
                 return Result.invalid("Tick interval must be positive");
             }
         }
@@ -44,8 +44,8 @@ public final class ServerTerminalCommandValidator {
     }
 
     public static final class Result {
-        private final boolean valid;
-        private final String message;
+        public final boolean valid;
+        public final String message;
 
         private Result(boolean valid, String message) {
             this.valid = valid;
@@ -60,12 +60,5 @@ public final class ServerTerminalCommandValidator {
             return new Result(false, Objects.requireNonNull(message, "message"));
         }
 
-        public boolean isValid() {
-            return valid;
-        }
-
-        public String getMessage() {
-            return message;
-        }
     }
 }

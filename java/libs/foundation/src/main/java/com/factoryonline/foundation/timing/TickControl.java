@@ -3,8 +3,8 @@ package com.factoryonline.foundation.timing;
 import java.util.Objects;
 
 public final class TickControl {
-    private final TickMode mode;
-    private final int tickIntervalMillis;
+    public final TickMode mode;
+    public final int tickIntervalMillis;
 
     private TickControl(TickMode mode, int tickIntervalMillis) {
         this.mode = Objects.requireNonNull(mode, "mode");
@@ -21,14 +21,6 @@ public final class TickControl {
 
     public static TickControl manual(int tickIntervalMillis) {
         return new TickControl(TickMode.MANUAL, tickIntervalMillis);
-    }
-
-    public TickMode getMode() {
-        return mode;
-    }
-
-    public int getTickIntervalMillis() {
-        return tickIntervalMillis;
     }
 
     public boolean isAutomatic() {

@@ -3,14 +3,10 @@ package com.factoryonline.foundation.ids;
 import java.util.Objects;
 
 public abstract class TaggedId {
-    private final String value;
+    public final String value;
 
     protected TaggedId(String value) {
         this.value = validateNonBlank(value, "value");
-    }
-
-    public String value() {
-        return value;
     }
 
     @Override

@@ -13,7 +13,7 @@ public final class SimulationRegistry {
     public synchronized void register(Simulation simulation) throws IllegalArgumentException {
         Objects.requireNonNull(simulation, "simulation");
 
-        SimulationId simulationId = simulation.getId();
+            SimulationId simulationId = simulation.id;
         if (simulations.containsKey(simulationId)) {
             throw new IllegalArgumentException("Duplicate simulation name: " + simulationId);
         }

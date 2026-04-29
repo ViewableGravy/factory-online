@@ -124,8 +124,8 @@ public final class ServerTerminalCommandParser {
     }
 
     public static final class Result {
-        private final ServerTerminalCommand command;
-        private final String message;
+        public final ServerTerminalCommand command;
+        public final String message;
 
         private Result(ServerTerminalCommand command, String message) {
             this.command = command;
@@ -148,12 +148,5 @@ public final class ServerTerminalCommandParser {
             return command != null;
         }
 
-        public ServerTerminalCommand getCommand() {
-            return command;
-        }
-
-        public String getMessage() {
-            return message;
-        }
     }
 }

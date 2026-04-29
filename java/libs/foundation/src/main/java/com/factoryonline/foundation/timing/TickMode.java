@@ -7,14 +7,10 @@ public enum TickMode {
     AUTOMATIC("automatic"),
     MANUAL("manual");
 
-    private final String protocolValue;
+    public final String protocolValue;
 
     TickMode(String protocolValue) {
         this.protocolValue = protocolValue;
-    }
-
-    public String protocolValue() {
-        return protocolValue;
     }
 
     public static TickMode fromValue(String value) {

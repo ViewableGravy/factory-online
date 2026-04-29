@@ -139,16 +139,16 @@ public final class ServerRuntimeLoop {
         while ((rawCommand = queuedInputs.poll()) != null) {
             ServerTerminalCommandParser.Result parseResult = ServerTerminalCommandParser.parse(rawCommand);
             if (!parseResult.hasCommand()) {
-                if (parseResult.getMessage() != null) {
-                    System.out.println(parseResult.getMessage());
+                if (parseResult.message != null) {
+                    System.out.println(parseResult.message);
                 }
                 continue;
             }
 
-            ServerTerminalCommand command = parseResult.getCommand();
+            ServerTerminalCommand command = parseResult.command;
             ServerTerminalCommandValidator.Result validationResult = ServerTerminalCommandValidator.validate(command, server, tickController);
-            if (!validationResult.isValid()) {
-                System.out.println(validationResult.getMessage());
+            if (!validationResult.valid) {
+                System.out.println(validationResult.message);
                 continue;
             }
 

@@ -16,8 +16,8 @@ public final class CustomUserInput {
     private static final String ARROW_UP = ESCAPE + "[A";
     private static final String ARROW_DOWN = ESCAPE + "[B";
 
-    private final String raw;
-    private final Kind kind;
+    public final String raw;
+    public final Kind kind;
 
     private CustomUserInput(String raw, Kind kind) {
         this.raw = Objects.requireNonNull(raw, "raw");
@@ -47,14 +47,6 @@ public final class CustomUserInput {
         }
 
         return new CustomUserInput(validatedRaw, Kind.CONTINUE);
-    }
-
-    public String getRaw() {
-        return raw;
-    }
-
-    public Kind getKind() {
-        return kind;
     }
 
     public boolean isIncrement() {

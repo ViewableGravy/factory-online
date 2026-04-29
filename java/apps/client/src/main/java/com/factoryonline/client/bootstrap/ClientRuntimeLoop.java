@@ -129,10 +129,10 @@ public final class ClientRuntimeLoop {
                 continue;
             }
 
-            ClientTerminalCommand command = parseResult.getCommand();
+            ClientTerminalCommand command = parseResult.command;
             ClientTerminalCommandValidator.Result validationResult = ClientTerminalCommandValidator.validate(command, client);
-            if (!validationResult.isValid()) {
-                System.out.println(validationResult.getMessage());
+            if (!validationResult.valid) {
+                System.out.println(validationResult.message);
                 continue;
             }
 

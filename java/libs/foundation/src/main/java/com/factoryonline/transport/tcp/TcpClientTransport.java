@@ -39,7 +39,7 @@ public final class TcpClientTransport implements ClientTransport, AutoCloseable 
         this.kryo = KryoStreams.createKryo();
         this.input = new Input(socket.getInputStream());
         this.output = new Output(socket.getOutputStream());
-        this.readerThread = new Thread(this::readLoop, "tcp-client-transport-reader-" + clientId.value());
+        this.readerThread = new Thread(this::readLoop, "tcp-client-transport-reader-" + clientId.value);
         this.readerThread.setDaemon(true);
         this.readerThread.start();
     }
@@ -52,7 +52,7 @@ public final class TcpClientTransport implements ClientTransport, AutoCloseable 
     @Override
     public void send(TransportMessage message, boolean delayed) {
         Objects.requireNonNull(message, "message");
-        writeCommand(new ClientTransportCommand(clientId, message.getPayload()));
+        writeCommand(new ClientTransportCommand(clientId, message.payload));
     }
 
     @Override
@@ -136,7 +136,7 @@ public final class TcpClientTransport implements ClientTransport, AutoCloseable 
     private void writeCommand(ProtocolCommand command) {
         synchronized (writeMonitor) {
             if (closed) {
-                throw new IllegalStateException("Transport is closed for client " + clientId.value());
+                throw new IllegalStateException("Transport is closed for client " + clientId.value);
             }
 
             try {
