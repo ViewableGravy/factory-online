@@ -13,10 +13,10 @@ import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.factoryonline.foundation.ids.ClientId;
-import com.factoryonline.transport.commands.ClientTransportCommand;
-import com.factoryonline.transport.commands.ProtocolCommand;
 import com.factoryonline.transport.ClientTransport;
 import com.factoryonline.transport.TransportMessage;
+import com.factoryonline.transport.commands.ClientTransportCommand;
+import com.factoryonline.transport.commands.ProtocolCommand;
 import com.factoryonline.transport.kryo.KryoStreams;
 
 public final class TcpClientTransport implements ClientTransport, AutoCloseable {

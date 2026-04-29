@@ -12,7 +12,13 @@ import com.factoryonline.foundation.config.TerminalCommands;
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
 import com.factoryonline.foundation.ids.SimulationIds;
+import com.factoryonline.foundation.timing.TickControl;
 import com.factoryonline.foundation.timing.Ticker;
+import com.factoryonline.simulation.Simulation;
+import com.factoryonline.simulation.SimulationActionResult;
+import com.factoryonline.simulation.SimulationAugmentation;
+import com.factoryonline.simulation.SimulationRegistry;
+import com.factoryonline.transport.ServerTransport;
 import com.factoryonline.transport.commands.AckCommand;
 import com.factoryonline.transport.commands.ClientTransportCommand;
 import com.factoryonline.transport.commands.InitialSimulationStateCommand;
@@ -21,12 +27,6 @@ import com.factoryonline.transport.commands.ProtocolCommand;
 import com.factoryonline.transport.commands.RejectionCommand;
 import com.factoryonline.transport.commands.SimulationInputCommand;
 import com.factoryonline.transport.commands.TickSyncCommand;
-import com.factoryonline.foundation.timing.TickControl;
-import com.factoryonline.simulation.Simulation;
-import com.factoryonline.simulation.SimulationActionResult;
-import com.factoryonline.simulation.SimulationAugmentation;
-import com.factoryonline.simulation.SimulationRegistry;
-import com.factoryonline.transport.ServerTransport;
 
 public final class ServerApplication {
     private static final TerminalUiState TERMINAL_UI_STATE = TerminalUiState.getInstance();
