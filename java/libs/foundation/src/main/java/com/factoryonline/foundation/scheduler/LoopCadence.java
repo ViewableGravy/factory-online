@@ -5,6 +5,12 @@ import java.util.concurrent.TimeUnit;
 
 import com.factoryonline.foundation.timing.TickControl;
 
+/**
+ * Utility class to manage the cadence of a runtime loop, supporting both fixed-interval and manual tick control.
+ * 
+ * A cadence is a rhythm or pattern of events. In the context of a runtime loop, it determines how often 
+ * the loop should execute its cycle.
+ */
 public final class LoopCadence {
     private static int tickIntervalMillis = -1;
     private static long nextDeadlineNanos = -1L;

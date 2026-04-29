@@ -79,3 +79,6 @@ better-ecs-reference/   -> Reference implementation and design source, not the d
 - Check `.github/skills/` before improvising repo-local conventions.
 - Use the Obsidian vault workflow skill when work involves documentation capture, task coordination, or knowledge-base updates.
 - Prefer the repo-local skill over generic habits when they conflict.
+
+## Coding Style
+- Prefer javascript style multi-line functions over java style (do not end the closing curly brace on the same line as the last statement if it is a multi-line function)

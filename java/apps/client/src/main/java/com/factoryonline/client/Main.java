@@ -23,7 +23,9 @@ public final class Main {
         TcpClientTransport transport = new TcpClientTransport(
             NetworkConfig.DEFAULT_HOST,
             NetworkConfig.DEFAULT_PORT,
-            clientId);
+            clientId
+        );
+
         ClientApplication client = new ClientApplication(clientId, SimulationIds.RANDOM, transport);
         ClientRuntimeLoop runtimeLoop = new ClientRuntimeLoop(client, transport);
         
