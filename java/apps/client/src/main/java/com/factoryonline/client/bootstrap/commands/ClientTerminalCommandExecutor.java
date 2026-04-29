@@ -5,7 +5,10 @@ import java.util.Objects;
 import com.factoryonline.client.bootstrap.ClientApplication;
 
 public final class ClientTerminalCommandExecutor {
-    public void execute(ClientTerminalCommand command, ClientApplication client) {
+    private ClientTerminalCommandExecutor() {
+    }
+
+    public static void execute(ClientTerminalCommand command, ClientApplication client) {
         ClientTerminalCommand validatedCommand = Objects.requireNonNull(command, "command");
         ClientApplication validatedClient = Objects.requireNonNull(client, "client");
 

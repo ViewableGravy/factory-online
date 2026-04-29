@@ -1,4 +1,4 @@
-package com.factoryonline.server.bootstrap;
+package com.factoryonline.foundation.timing;
 
 import java.util.concurrent.atomic.AtomicInteger;
 

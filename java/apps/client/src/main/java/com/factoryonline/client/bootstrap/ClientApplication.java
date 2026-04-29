@@ -6,10 +6,20 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import com.factoryonline.client.scheduler.ClientTickSynchronizer;
 import com.factoryonline.foundation.config.RuntimeTiming;
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
 import com.factoryonline.foundation.ids.SimulationIds;
+import com.factoryonline.foundation.scheduler.TickScheduler;
+import com.factoryonline.foundation.timing.TickControl;
+import com.factoryonline.foundation.timing.Ticker;
+import com.factoryonline.server.bootstrap.BatchedSimulationRunner;
+import com.factoryonline.server.bootstrap.TerminalUiState;
+import com.factoryonline.simulation.Simulation;
+import com.factoryonline.simulation.SimulationAugmentation;
+import com.factoryonline.simulation.SimulationRegistry;
+import com.factoryonline.transport.ClientTransport;
 import com.factoryonline.transport.commands.AckCommand;
 import com.factoryonline.transport.commands.InitialSimulationStateCommand;
 import com.factoryonline.transport.commands.JoinSimulationCommand;
@@ -17,34 +27,23 @@ import com.factoryonline.transport.commands.RejectionCommand;
 import com.factoryonline.transport.commands.SimulationInputCommand;
 import com.factoryonline.transport.commands.SimulationUpdateCommand;
 import com.factoryonline.transport.commands.TickSyncCommand;
-import com.factoryonline.foundation.timing.TickControl;
-import com.factoryonline.server.bootstrap.BatchedSimulationRunner;
-import com.factoryonline.server.bootstrap.TerminalUiState;
-import com.factoryonline.server.bootstrap.Ticker;
-import com.factoryonline.simulation.Simulation;
-import com.factoryonline.simulation.SimulationAugmentation;
-import com.factoryonline.simulation.SimulationRegistry;
-import com.factoryonline.transport.ClientTransport;
 
 public final class ClientApplication {
     // The long-term target is an extra client delay budget on top of observed network delay.
+    // TCP tick sync does not currently carry enough clock information to measure that delay safely.
     // The manual harness still works in whole ticks, so the current value of 4 remains the local safety buffer.
     private static final TerminalUiState TERMINAL_UI_STATE = TerminalUiState.getInstance();
 
     private final ClientId clientId;
     private final SimulationId requestedSimulationId;
     private final ClientTransport transport;
+    private final ClientTickSynchronizer tickSynchronizer;
     private final SimulationRegistry simulationRegistry = new SimulationRegistry();
     private final Map<SimulationId, Map<Integer, SimulationAugmentation>> queuedActionsBySimulation = new HashMap<>();
     private final Map<SimulationId, Map<Integer, Integer>> queuedChecksumsBySimulation = new HashMap<>();
-    private final Map<SimulationId, TickSyncState> tickSyncStatesBySimulation = new HashMap<>();
     private final Set<SimulationId> attachedSimulationIds = new HashSet<>();
-    private TickControl tickControl = TickControl.automatic(RuntimeTiming.TICK_INTERVAL_MILLIS);
-    private Ticker ticker;
+    private TickScheduler tickScheduler;
     private BatchedSimulationRunner runner;
-    private int pendingSimulationStartTick = -1;
-    private int pendingSimulationSteps;
-    private int remainingStartupBufferTicks;
     private boolean joinRequested;
     private SimulationId joinedSimulationId;
 
@@ -52,6 +51,7 @@ public final class ClientApplication {
         this.clientId = Objects.requireNonNull(clientId, "clientId");
         this.requestedSimulationId = Objects.requireNonNull(requestedSimulationId, "requestedSimulationId");
         this.transport = Objects.requireNonNull(transport, "transport");
+        this.tickSynchronizer = new ClientTickSynchronizer(clientId);
     }
 
     public void setup() {
@@ -76,36 +76,27 @@ public final class ClientApplication {
 
     public void tick() {
         processIncomingMessages();
-        advanceTick();
+        scheduleTicks(true);
         simulateCurrentTick();
     }
 
-    public void advanceTick() {
-        if (ticker == null || runner == null) {
+    public void scheduleTicks(boolean automaticTickDue) {
+        if (tickScheduler == null || runner == null) {
             return;
         }
 
-        pendingSimulationStartTick = -1;
-        pendingSimulationSteps = 0;
-
-        if (remainingStartupBufferTicks > 0) {
-            remainingStartupBufferTicks -= 1;
-            return;
-        }
-
-        int simulationSteps = determineSimulationSteps();
-        for (int index = 0; index < simulationSteps; index += 1) {
-            int simulationTick = ticker.tick();
-            if (pendingSimulationStartTick < 0) {
-                pendingSimulationStartTick = simulationTick;
-            }
-
-            pendingSimulationSteps += 1;
-        }
+        int requestedTicks = tickSynchronizer.requestTicks(
+            joinedSimulationId,
+            tickScheduler.getTick(),
+            transport.getCurrentTick(),
+            automaticTickDue
+        );
+        
+        tickScheduler.queueTicks(requestedTicks);
     }
 
     public TickControl getTickControl() {
-        return tickControl;
+        return tickSynchronizer.getTickControl();
     }
 
     public boolean canRequestSnapshot() {
@@ -118,6 +109,14 @@ public final class ClientApplication {
 
     public String getFormattedClientLabel() {
         return TERMINAL_UI_STATE.formatClient(clientId);
+    }
+
+    public int getLocalSimulationTick() {
+        if (tickScheduler == null) {
+            return -1;
+        }
+
+        return tickScheduler.getTick();
     }
 
     public void requestSnapshot() {
@@ -144,24 +143,16 @@ public final class ClientApplication {
     }
 
     public void simulateCurrentTick() {
-        if (ticker == null || runner == null || pendingSimulationSteps <= 0 || pendingSimulationStartTick <= 0) {
+        if (tickScheduler == null || runner == null) {
             return;
         }
 
-        for (int step = 0; step < pendingSimulationSteps; step += 1) {
-            int simulationTick = pendingSimulationStartTick + step;
-            applyQueuedActions(simulationTick);
-            runner.runTick(simulationTick);
-            compareQueuedChecksum(simulationTick);
-        }
-
-        pendingSimulationStartTick = -1;
-        pendingSimulationSteps = 0;
+        tickScheduler.runQueuedTicks();
     }
 
     public void cleanup() {
-        if (ticker != null) {
-            ticker.shutdown();
+        if (tickScheduler != null) {
+            tickScheduler.shutdown();
         }
 
         if (runner != null) {
@@ -193,21 +184,7 @@ public final class ClientApplication {
 
     private void receiveTickSyncMessages() {
         for (TickSyncCommand tickSyncMessage : transport.drainAs(TickSyncCommand.class)) {
-            int observedTransportDelayTicks = Math.max(0, transport.getCurrentTick() - tickSyncMessage.serverTick);
-            TickSyncState previousState = tickSyncStatesBySimulation.get(tickSyncMessage.simulationId);
-            double pacingAdjustmentCredit = previousState == null ? 0.0D : previousState.pacingAdjustmentCredit;
-            
-            tickSyncStatesBySimulation.put(
-                tickSyncMessage.simulationId,
-                new TickSyncState(
-                    tickSyncMessage.serverTick,
-                    transport.getCurrentTick(),
-                    observedTransportDelayTicks,
-                    pacingAdjustmentCredit,
-                    tickSyncMessage.tickControl
-                )
-            );
-            tickControl = tickSyncMessage.tickControl;
+            tickSynchronizer.receive(tickSyncMessage, transport.getCurrentTick());
             queueChecksum(tickSyncMessage);
         }
     }
@@ -247,10 +224,10 @@ public final class ClientApplication {
             return;
         }
 
-        if (ticker == null || runner == null) {
-            ticker = new Ticker(initialState.tick);
+        if (tickScheduler == null || runner == null) {
             runner = new BatchedSimulationRunner(1, "client");
-            remainingStartupBufferTicks = Math.max(0, RuntimeTiming.CLIENT_TARGET_LOCAL_BUFFER_TICKS - 1);
+            tickScheduler = new TickScheduler(new Ticker(initialState.tick), this::runSimulationTick);
+            tickScheduler.setStartupBufferTicks(Math.max(0, RuntimeTiming.CLIENT_TARGET_LOCAL_BUFFER_TICKS - 1));
         }
 
         Simulation bufferedSimulation = new Simulation(initialState.simulationId, initialState.snapshot);
@@ -266,72 +243,18 @@ public final class ClientApplication {
                 + " with startup buffer " + RuntimeTiming.CLIENT_TARGET_LOCAL_BUFFER_TICKS);
     }
 
-    private int determineSimulationSteps() {
-        SimulationId activeSimulationId = joinedSimulationId;
-        if (activeSimulationId == null) {
-            return 1;
-        }
-
-        TickSyncState tickSyncState = tickSyncStatesBySimulation.get(activeSimulationId);
-        if (tickSyncState == null) {
-            return 1;
-        }
-
-        if (tickSyncState.tickControl.isManual()) {
-            return Math.max(0, tickSyncState.serverTick - ticker.getTick());
-        }
-
-        int estimatedServerTick = tickSyncState.estimateCurrentServerTick(transport.getCurrentTick());
-        int targetLagTicks = tickSyncState.observedTransportDelayTicks + RuntimeTiming.CLIENT_TARGET_LOCAL_BUFFER_TICKS;
-        int currentLagTicks = estimatedServerTick - ticker.getTick();
-        int lagErrorTicks = currentLagTicks - targetLagTicks;
-
-        if (lagErrorTicks < -RuntimeTiming.CLIENT_HARD_CORRECTION_TICKS) {
-            System.out.println(
-                "Client " + TERMINAL_UI_STATE.formatClient(clientId)
-                    + " is ahead of the server for " + TERMINAL_UI_STATE.formatSimulation(activeSimulationId)
-                    + " (current lag " + currentLagTicks + " ticks, target " + targetLagTicks
-                    + " +/- " + RuntimeTiming.CLIENT_HARD_CORRECTION_TICKS + "); holding local simulation");
-            return 0;
-        }
-
-        if (lagErrorTicks > RuntimeTiming.CLIENT_HARD_CORRECTION_TICKS) {
-            System.out.println(
-                "Client " + TERMINAL_UI_STATE.formatClient(clientId)
-                    + " is behind the server for " + TERMINAL_UI_STATE.formatSimulation(activeSimulationId)
-                    + " (current lag " + currentLagTicks + " ticks, target " + targetLagTicks
-                    + " +/- " + RuntimeTiming.CLIENT_HARD_CORRECTION_TICKS + "); running catch-up ticks");
-            return RuntimeTiming.CLIENT_CATCH_UP_TICKS;
-        }
-
-        tickSyncState.pacingAdjustmentCredit += lagErrorTicks * RuntimeTiming.CLIENT_RATE_ADJUSTMENT_GAIN;
-        if (tickSyncState.pacingAdjustmentCredit <= -1.0D
-            && lagErrorTicks < -RuntimeTiming.CLIENT_LAG_TOLERANCE_TICKS) {
-            tickSyncState.pacingAdjustmentCredit += 1.0D;
-            return 0;
-        }
-
-        if (tickSyncState.pacingAdjustmentCredit >= 1.0D
-            && lagErrorTicks > RuntimeTiming.CLIENT_LAG_TOLERANCE_TICKS) {
-            tickSyncState.pacingAdjustmentCredit -= 1.0D;
-            return RuntimeTiming.CLIENT_CATCH_UP_TICKS;
-        }
-
-        return 1;
-    }
-
     private void queueChecksum(TickSyncCommand tickSyncMessage) {
         SimulationId simulationId = tickSyncMessage.simulationId;
         if (joinedSimulationId == null || !joinedSimulationId.equals(simulationId)) {
             return;
         }
 
-        if (ticker != null && ticker.getTick() > tickSyncMessage.serverTick) {
+        if (tickScheduler != null && tickScheduler.getTick() > tickSyncMessage.serverTick) {
             System.out.println(
                 "Client " + TERMINAL_UI_STATE.formatClient(clientId)
                     + " skipped late checksum for tick " + tickSyncMessage.serverTick
                     + " on " + TERMINAL_UI_STATE.formatSimulation(simulationId)
-                    + " because local simulation is already at tick " + ticker.getTick());
+                    + " because local simulation is already at tick " + tickScheduler.getTick());
             return;
         }
 
@@ -377,29 +300,9 @@ public final class ClientApplication {
         return TERMINAL_UI_STATE.formatSimulation(requestedSimulationId);
     }
 
-    private static final class TickSyncState {
-        private final int serverTick;
-        private final int observedAtTransportTick;
-        private final int observedTransportDelayTicks;
-        private final TickControl tickControl;
-        private double pacingAdjustmentCredit;
-
-        private TickSyncState(
-            int serverTick,
-            int observedAtTransportTick,
-            int observedTransportDelayTicks,
-            double pacingAdjustmentCredit,
-            TickControl tickControl
-        ) {
-            this.serverTick = serverTick;
-            this.observedAtTransportTick = observedAtTransportTick;
-            this.observedTransportDelayTicks = observedTransportDelayTicks;
-            this.pacingAdjustmentCredit = pacingAdjustmentCredit;
-            this.tickControl = Objects.requireNonNull(tickControl, "tickControl");
-        }
-
-        private int estimateCurrentServerTick(int currentTransportTick) {
-            return serverTick + Math.max(0, currentTransportTick - observedAtTransportTick);
-        }
+    private void runSimulationTick(int simulationTick) {
+        applyQueuedActions(simulationTick);
+        runner.runTick(simulationTick);
+        compareQueuedChecksum(simulationTick);
     }
 }

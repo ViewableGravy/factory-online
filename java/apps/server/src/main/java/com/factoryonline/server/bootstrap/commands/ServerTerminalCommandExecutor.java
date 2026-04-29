@@ -11,7 +11,10 @@ import com.factoryonline.server.bootstrap.TerminalUiState;
 public final class ServerTerminalCommandExecutor {
     private static final TerminalUiState TERMINAL_UI_STATE = TerminalUiState.getInstance();
 
-    public void execute(ServerTerminalCommand command, ServerApplication server, ServerTickController tickController) {
+    private ServerTerminalCommandExecutor() {
+    }
+
+    public static void execute(ServerTerminalCommand command, ServerApplication server, ServerTickController tickController) {
         ServerTerminalCommand validatedCommand = Objects.requireNonNull(command, "command");
         ServerApplication validatedServer = Objects.requireNonNull(server, "server");
         ServerTickController validatedTickController = Objects.requireNonNull(tickController, "tickController");

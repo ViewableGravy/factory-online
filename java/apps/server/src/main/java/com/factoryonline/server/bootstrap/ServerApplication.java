@@ -12,6 +12,7 @@ import com.factoryonline.foundation.config.TerminalCommands;
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
 import com.factoryonline.foundation.ids.SimulationIds;
+import com.factoryonline.foundation.timing.Ticker;
 import com.factoryonline.transport.commands.AckCommand;
 import com.factoryonline.transport.commands.ClientTransportCommand;
 import com.factoryonline.transport.commands.InitialSimulationStateCommand;
@@ -126,7 +127,7 @@ public final class ServerApplication {
         }
 
         SimulationAugmentation validatedAugmentation = Objects.requireNonNull(augmentation, "augmentation");
-        int targetTick = ticker.getTick();
+        int targetTick = nextInputTargetTick();
         SimulationActionResult validationResult = queueValidatedInput(serverSession, validatedAugmentation, targetTick);
         if (!validationResult.isSuccess()) {
             System.out.println(
@@ -221,7 +222,7 @@ public final class ServerApplication {
             return;
         }
 
-        int targetTick = ticker.getTick();
+        int targetTick = nextInputTargetTick();
         SimulationActionResult validationResult = queueValidatedInput(session, inputRequest.augmentation, targetTick);
         if (!validationResult.isSuccess()) {
             reject(clientId, inputRequest.simulationId, "input rejected: " + validationResult.getError());
@@ -255,6 +256,10 @@ public final class ServerApplication {
             .computeIfAbsent(targetTick, ignored -> new ArrayList<>())
             .add(new BufferedSimulationInput(validatedSession, validatedAugmentation));
         return SimulationActionResult.success();
+    }
+
+    private int nextInputTargetTick() {
+        return ticker.getTick() + RuntimeTiming.SERVER_INPUT_LEAD_TICKS;
     }
 
     private void applyBufferedInputs(int tick) {

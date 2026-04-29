@@ -7,7 +7,10 @@ import com.factoryonline.server.bootstrap.ServerApplication;
 import com.factoryonline.server.bootstrap.ServerTickController;
 
 public final class ServerTerminalCommandValidator {
-    public Result validate(ServerTerminalCommand command, ServerApplication server, ServerTickController tickController) {
+    private ServerTerminalCommandValidator() {
+    }
+
+    public static Result validate(ServerTerminalCommand command, ServerApplication server, ServerTickController tickController) {
         ServerTerminalCommand validatedCommand = Objects.requireNonNull(command, "command");
         ServerApplication validatedServer = Objects.requireNonNull(server, "server");
         ServerTickController validatedTickController = Objects.requireNonNull(tickController, "tickController");

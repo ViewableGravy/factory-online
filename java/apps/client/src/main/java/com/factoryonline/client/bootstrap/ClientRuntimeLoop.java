@@ -10,6 +10,7 @@ import com.factoryonline.client.bootstrap.commands.ClientTerminalCommand;
 import com.factoryonline.client.bootstrap.commands.ClientTerminalCommandExecutor;
 import com.factoryonline.client.bootstrap.commands.ClientTerminalCommandParser;
 import com.factoryonline.client.bootstrap.commands.ClientTerminalCommandValidator;
+import com.factoryonline.foundation.scheduler.LoopCadence;
 import com.factoryonline.foundation.timing.TickControl;
 import com.factoryonline.transport.ClientTransport;
 
@@ -18,9 +19,6 @@ public final class ClientRuntimeLoop {
     private final ClientTransport transport;
     private final Queue<String> queuedInputs = new ConcurrentLinkedQueue<>();
     private final Queue<ClientTerminalCommand> queuedCommands = new ConcurrentLinkedQueue<>();
-    private final ClientTerminalCommandParser parser = new ClientTerminalCommandParser();
-    private final ClientTerminalCommandValidator validator = new ClientTerminalCommandValidator();
-    private final ClientTerminalCommandExecutor executor = new ClientTerminalCommandExecutor();
     private final Object wakeMonitor = new Object();
     private final AtomicBoolean running = new AtomicBoolean();
     private long wakeVersion;
@@ -68,13 +66,8 @@ public final class ClientRuntimeLoop {
     private void runLoop() {
         while (running.get()) {
             TickControl tickControl = client.getTickControl();
-            boolean timedWake = awaitWake(tickControl);
-            if (!running.get()) {
-                return;
-            }
-
-            if (timedWake && tickControl.isAutomatic()) {
-                client.advanceTick();
+            boolean automaticTickDue = LoopCadence.beginCycle(tickControl);
+            if (automaticTickDue && tickControl.isAutomatic()) {
                 transport.advanceTick();
             }
 
@@ -83,35 +76,31 @@ public final class ClientRuntimeLoop {
             client.processIncomingMessages();
 
             TickControl updatedTickControl = client.getTickControl();
-            if (updatedTickControl.isManual()) {
-                client.advanceTick();
-            }
-
+            client.scheduleTicks(automaticTickDue && updatedTickControl.isAutomatic());
             client.simulateCurrentTick();
+            awaitEnd(updatedTickControl);
         }
     }
 
-    private boolean awaitWake(TickControl tickControl) {
+    private void awaitEnd(TickControl tickControl) {
         synchronized (wakeMonitor) {
             long observedWakeVersion = wakeVersion;
             if (tickControl.isAutomatic()) {
-                long remainingNanos = TimeUnit.MILLISECONDS.toNanos(tickControl.getTickIntervalMillis());
                 while (running.get() && wakeVersion == observedWakeVersion) {
+                    long remainingNanos = LoopCadence.remainingNanos(tickControl);
                     if (remainingNanos <= 0L) {
-                        return true;
+                        return;
                     }
 
-                    long beforeWait = System.nanoTime();
                     try {
                         TimeUnit.NANOSECONDS.timedWait(wakeMonitor, remainingNanos);
                     } catch (InterruptedException exception) {
                         Thread.currentThread().interrupt();
-                        return false;
+                        return;
                     }
-                    remainingNanos -= System.nanoTime() - beforeWait;
                 }
 
-                return wakeVersion == observedWakeVersion;
+                return;
             }
 
             while (running.get() && wakeVersion == observedWakeVersion) {
@@ -119,11 +108,9 @@ public final class ClientRuntimeLoop {
                     wakeMonitor.wait();
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
-                    return false;
+                    return;
                 }
             }
-
-            return false;
         }
     }
 
@@ -137,13 +124,13 @@ public final class ClientRuntimeLoop {
     private void drainInputs() {
         String rawInput;
         while ((rawInput = queuedInputs.poll()) != null) {
-            ClientTerminalCommandParser.Result parseResult = parser.parse(rawInput);
+            ClientTerminalCommandParser.Result parseResult = ClientTerminalCommandParser.parse(rawInput);
             if (!parseResult.hasCommand()) {
                 continue;
             }
 
             ClientTerminalCommand command = parseResult.getCommand();
-            ClientTerminalCommandValidator.Result validationResult = validator.validate(command, client);
+            ClientTerminalCommandValidator.Result validationResult = ClientTerminalCommandValidator.validate(command, client);
             if (!validationResult.isValid()) {
                 System.out.println(validationResult.getMessage());
                 continue;
@@ -156,7 +143,7 @@ public final class ClientRuntimeLoop {
     private void executeQueuedCommands() {
         ClientTerminalCommand command;
         while ((command = queuedCommands.poll()) != null) {
-            executor.execute(command, client);
+            ClientTerminalCommandExecutor.execute(command, client);
         }
     }
 }

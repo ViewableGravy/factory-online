@@ -7,7 +7,10 @@ import com.factoryonline.server.bootstrap.CustomUserInput;
 import com.factoryonline.simulation.SimulationAugmentation;
 
 public final class ClientTerminalCommandParser {
-    public Result parse(String rawCommand) {
+    private ClientTerminalCommandParser() {
+    }
+
+    public static Result parse(String rawCommand) {
         String normalizedCommand = Objects.requireNonNull(rawCommand, "rawCommand").strip();
         if (normalizedCommand.isEmpty()) {
             return Result.ignore();

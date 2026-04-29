@@ -6,6 +6,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import com.factoryonline.foundation.scheduler.LoopCadence;
 import com.factoryonline.foundation.timing.TickControl;
 import com.factoryonline.server.bootstrap.commands.ServerTerminalCommand;
 import com.factoryonline.server.bootstrap.commands.ServerTerminalCommandExecutor;
@@ -18,9 +19,6 @@ public final class ServerRuntimeLoop {
     private final ServerTickController tickController;
     private final Queue<String> queuedInputs = new ConcurrentLinkedQueue<>();
     private final Queue<ServerTerminalCommand> queuedCommands = new ConcurrentLinkedQueue<>();
-    private final ServerTerminalCommandParser parser = new ServerTerminalCommandParser();
-    private final ServerTerminalCommandValidator validator = new ServerTerminalCommandValidator();
-    private final ServerTerminalCommandExecutor executor = new ServerTerminalCommandExecutor();
     private final Object wakeMonitor = new Object();
     private final AtomicBoolean running = new AtomicBoolean();
     private long wakeVersion;
@@ -68,10 +66,7 @@ public final class ServerRuntimeLoop {
     private void runLoop() {
         while (running.get()) {
             TickControl tickControl = tickController.getTickControl();
-            boolean timedWake = awaitWake(tickControl);
-            if (!running.get()) {
-                return;
-            }
+            boolean automaticTickDue = LoopCadence.beginCycle(tickControl);
 
             drainInputs();
             executeQueuedCommands();
@@ -84,39 +79,34 @@ public final class ServerRuntimeLoop {
                     server.advanceTick();
                     server.simulateCurrentTick();
                 }
-                continue;
+            } else if (automaticTickDue) {
+                server.advanceTick();
+                server.simulateCurrentTick();
             }
 
-            if (!timedWake) {
-                continue;
-            }
-
-            server.advanceTick();
-            server.simulateCurrentTick();
+            awaitEnd(updatedTickControl);
         }
     }
 
-    private boolean awaitWake(TickControl tickControl) {
+    private void awaitEnd(TickControl tickControl) {
         synchronized (wakeMonitor) {
             long observedWakeVersion = wakeVersion;
             if (tickControl.isAutomatic()) {
-                long remainingNanos = TimeUnit.MILLISECONDS.toNanos(tickControl.getTickIntervalMillis());
                 while (running.get() && wakeVersion == observedWakeVersion) {
+                    long remainingNanos = LoopCadence.remainingNanos(tickControl);
                     if (remainingNanos <= 0L) {
-                        return true;
+                        return;
                     }
 
-                    long beforeWait = System.nanoTime();
                     try {
                         TimeUnit.NANOSECONDS.timedWait(wakeMonitor, remainingNanos);
                     } catch (InterruptedException exception) {
                         Thread.currentThread().interrupt();
-                        return false;
+                        return;
                     }
-                    remainingNanos -= System.nanoTime() - beforeWait;
                 }
 
-                return wakeVersion == observedWakeVersion;
+                return;
             }
 
             while (running.get() && wakeVersion == observedWakeVersion) {
@@ -124,11 +114,9 @@ public final class ServerRuntimeLoop {
                     wakeMonitor.wait();
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
-                    return false;
+                    return;
                 }
             }
-
-            return false;
         }
     }
 
@@ -142,14 +130,14 @@ public final class ServerRuntimeLoop {
     private void drainCommands() {
         ServerTerminalCommand command;
         while ((command = queuedCommands.poll()) != null) {
-            executor.execute(command, server, tickController);
+            ServerTerminalCommandExecutor.execute(command, server, tickController);
         }
     }
 
     private void drainInputs() {
         String rawCommand;
         while ((rawCommand = queuedInputs.poll()) != null) {
-            ServerTerminalCommandParser.Result parseResult = parser.parse(rawCommand);
+            ServerTerminalCommandParser.Result parseResult = ServerTerminalCommandParser.parse(rawCommand);
             if (!parseResult.hasCommand()) {
                 if (parseResult.getMessage() != null) {
                     System.out.println(parseResult.getMessage());
@@ -158,7 +146,7 @@ public final class ServerRuntimeLoop {
             }
 
             ServerTerminalCommand command = parseResult.getCommand();
-            ServerTerminalCommandValidator.Result validationResult = validator.validate(command, server, tickController);
+            ServerTerminalCommandValidator.Result validationResult = ServerTerminalCommandValidator.validate(command, server, tickController);
             if (!validationResult.isValid()) {
                 System.out.println(validationResult.getMessage());
                 continue;

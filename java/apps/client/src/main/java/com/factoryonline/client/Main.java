@@ -9,6 +9,7 @@ import com.factoryonline.foundation.config.NetworkConfig;
 import com.factoryonline.foundation.config.TerminalCommands;
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationIds;
+import com.factoryonline.foundation.scheduler.LoopCadence;
 import com.factoryonline.foundation.terminal.TerminalCommandHandler;
 import com.factoryonline.server.bootstrap.TerminalUiState;
 import com.factoryonline.transport.tcp.TcpClientTransport;
@@ -17,6 +18,8 @@ public final class Main {
     public static final ClientId clientId = new ClientId("client-" + UUID.randomUUID().toString().substring(0, 8));
 
     public static void main(String[] args) throws IOException {
+        LoopCadence.initialize();
+
         TcpClientTransport transport = new TcpClientTransport(
             NetworkConfig.DEFAULT_HOST,
             NetworkConfig.DEFAULT_PORT,

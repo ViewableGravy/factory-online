@@ -8,7 +8,10 @@ import com.factoryonline.server.bootstrap.CustomUserInput;
 import com.factoryonline.simulation.SimulationAugmentation;
 
 public final class ServerTerminalCommandParser {
-    public Result parse(String rawCommand) {
+    private ServerTerminalCommandParser() {
+    }
+
+    public static Result parse(String rawCommand) {
         String normalizedCommand = Objects.requireNonNull(rawCommand, "rawCommand").strip();
         if (normalizedCommand.isEmpty()) {
             return Result.ignore(null);
@@ -50,7 +53,7 @@ public final class ServerTerminalCommandParser {
         return normalizedCommand.equals(command) || normalizedCommand.startsWith(command + " ");
     }
 
-    private Result parseServerSimulationCommand(String serverCommand) {
+    private static Result parseServerSimulationCommand(String serverCommand) {
         if (serverCommand.isEmpty()) {
             return Result.invalid("Unknown " + TerminalCommands.SERVER_COMMAND_PREFIX + " command: " + serverCommand);
         }
@@ -64,7 +67,7 @@ public final class ServerTerminalCommandParser {
         return Result.command(new ServerTerminalCommand.ApplyServerSimulationInput(augmentation));
     }
 
-    private Result parseTickCommand(String normalizedCommand) {
+    private static Result parseTickCommand(String normalizedCommand) {
         String[] parts = normalizedCommand.split("\\s+");
         if (parts.length > 2) {
             return Result.invalid("Usage: " + TerminalCommands.TICK_USAGE);
@@ -82,7 +85,7 @@ public final class ServerTerminalCommandParser {
         return Result.command(new ServerTerminalCommand.QueueManualTicks(requestedTicks));
     }
 
-    private Result parseTickModeCommand(String normalizedCommand) {
+    private static Result parseTickModeCommand(String normalizedCommand) {
         String[] parts = normalizedCommand.split("\\s+");
         if (parts.length != 2) {
             return Result.invalid("Usage: " + TerminalCommands.TICK_MODE_USAGE);
@@ -95,7 +98,7 @@ public final class ServerTerminalCommandParser {
         }
     }
 
-    private Result parseTickRateCommand(String normalizedCommand) {
+    private static Result parseTickRateCommand(String normalizedCommand) {
         String[] parts = normalizedCommand.split("\\s+");
         if (parts.length != 2) {
             return Result.invalid("Usage: " + TerminalCommands.TICK_RATE_USAGE);
