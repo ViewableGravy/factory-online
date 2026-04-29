@@ -1,34 +1,34 @@
 package com.factoryonline.transport.tcp;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 import java.net.Socket;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.KryoException;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 import com.factoryonline.foundation.ids.ClientId;
-import com.factoryonline.foundation.protocol.ClientTransportMessageDTO;
-import com.factoryonline.foundation.protocol.ProtocolDTO;
-import com.factoryonline.foundation.protocol.ProtocolDTOContainer;
+import com.factoryonline.transport.commands.ClientTransportCommand;
+import com.factoryonline.transport.commands.ProtocolCommand;
 import com.factoryonline.transport.ClientTransport;
 import com.factoryonline.transport.TransportMessage;
+import com.factoryonline.transport.kryo.KryoStreams;
 
 public final class TcpClientTransport implements ClientTransport, AutoCloseable {
     private final ClientId clientId;
     private final Socket socket;
-    private final BufferedReader reader;
-    private final BufferedWriter writer;
+    private final Kryo kryo;
+    private final Input input;
+    private final Output output;
     private final Thread readerThread;
     private final AtomicInteger currentTick = new AtomicInteger();
     private final Object writeMonitor = new Object();
-    private final List<ProtocolDTOContainer> queuedDtos = new ArrayList<>();
+    private final List<ProtocolCommand> queuedCommands = new ArrayList<>();
     private final List<Runnable> messageListeners = new ArrayList<>();
 
     private volatile boolean closed;
@@ -36,8 +36,9 @@ public final class TcpClientTransport implements ClientTransport, AutoCloseable 
     public TcpClientTransport(String host, int port, ClientId clientId) throws IOException {
         this.clientId = Objects.requireNonNull(clientId, "clientId");
         this.socket = new Socket(requireNonBlank(host, "host"), requirePort(port));
-        this.reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
-        this.writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
+        this.kryo = KryoStreams.createKryo();
+        this.input = new Input(socket.getInputStream());
+        this.output = new Output(socket.getOutputStream());
         this.readerThread = new Thread(this::readLoop, "tcp-client-transport-reader-" + clientId.value());
         this.readerThread.setDaemon(true);
         this.readerThread.start();
@@ -51,7 +52,7 @@ public final class TcpClientTransport implements ClientTransport, AutoCloseable 
     @Override
     public void send(TransportMessage message, boolean delayed) {
         Objects.requireNonNull(message, "message");
-        writeLine(new ClientTransportMessageDTO(clientId, message.getPayload()).serialize());
+        writeCommand(new ClientTransportCommand(clientId, message.getPayload()));
     }
 
     @Override
@@ -72,20 +73,19 @@ public final class TcpClientTransport implements ClientTransport, AutoCloseable 
     }
 
     @Override
-    public <T, D extends ProtocolDTO<T>> List<T> drainAs(Class<D> dtoClass) {
-        Objects.requireNonNull(dtoClass, "dtoClass");
+    public <T extends ProtocolCommand> List<T> drainAs(Class<T> commandClass) {
+        Objects.requireNonNull(commandClass, "commandClass");
 
         List<T> drainedValues = new ArrayList<>();
-        String dtoId = ProtocolDTO.resolveId(dtoClass).value();
-        synchronized (queuedDtos) {
-            Iterator<ProtocolDTOContainer> iterator = queuedDtos.iterator();
+        synchronized (queuedCommands) {
+            Iterator<ProtocolCommand> iterator = queuedCommands.iterator();
             while (iterator.hasNext()) {
-                ProtocolDTOContainer queuedDto = iterator.next();
-                if (!dtoId.equals(queuedDto.getId().value())) {
+                ProtocolCommand queuedDto = iterator.next();
+                if (!commandClass.isInstance(queuedDto)) {
                     continue;
                 }
 
-                drainedValues.add(ProtocolDTO.fromContainer(dtoClass, queuedDto));
+                drainedValues.add(commandClass.cast(queuedDto));
                 iterator.remove();
             }
         }
@@ -104,25 +104,8 @@ public final class TcpClientTransport implements ClientTransport, AutoCloseable 
             failure = exception;
         }
 
-        try {
-            reader.close();
-        } catch (IOException exception) {
-            if (failure == null) {
-                failure = exception;
-            } else {
-                failure.addSuppressed(exception);
-            }
-        }
-
-        try {
-            writer.close();
-        } catch (IOException exception) {
-            if (failure == null) {
-                failure = exception;
-            } else {
-                failure.addSuppressed(exception);
-            }
-        }
+        input.close();
+        output.close();
 
         if (failure != null) {
             throw failure;
@@ -131,32 +114,35 @@ public final class TcpClientTransport implements ClientTransport, AutoCloseable 
 
     private void readLoop() {
         try {
-            String line;
-            while (!closed && (line = reader.readLine()) != null) {
-                ProtocolDTOContainer container = ProtocolDTO.deserialize(line);
-                synchronized (queuedDtos) {
-                    queuedDtos.add(container);
+            while (!closed) {
+                Object decodedObject = kryo.readClassAndObject(input);
+                if (!(decodedObject instanceof ProtocolCommand)) {
+                    throw new IllegalStateException("Client transport received non-command payload: " + decodedObject);
+                }
+
+                ProtocolCommand container = (ProtocolCommand) decodedObject;
+                synchronized (queuedCommands) {
+                    queuedCommands.add(container);
                 }
                 notifyMessageListeners();
             }
-        } catch (IOException exception) {
-            if (!closed) {
+        } catch (KryoException exception) {
+            if (!closed && !isEndOfStream(exception)) {
                 System.err.println("Client transport read failed: " + exception.getMessage());
             }
         }
     }
 
-    private void writeLine(String line) {
+    private void writeCommand(ProtocolCommand command) {
         synchronized (writeMonitor) {
             if (closed) {
                 throw new IllegalStateException("Transport is closed for client " + clientId.value());
             }
 
             try {
-                writer.write(line);
-                writer.newLine();
-                writer.flush();
-            } catch (IOException exception) {
+                kryo.writeClassAndObject(output, Objects.requireNonNull(command, "command"));
+                output.flush();
+            } catch (KryoException exception) {
                 throw new IllegalStateException("Failed to send client transport message", exception);
             }
         }
@@ -188,5 +174,10 @@ public final class TcpClientTransport implements ClientTransport, AutoCloseable 
         }
 
         return port;
+    }
+
+    private static boolean isEndOfStream(KryoException exception) {
+        String message = exception.getMessage();
+        return message != null && message.contains("Buffer underflow");
     }
 }

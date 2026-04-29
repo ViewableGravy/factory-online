@@ -22,9 +22,6 @@ public final class TerminalUiState {
     private final Map<SimulationId, String> colorsBySimulationId = new HashMap<>();
     private ClientId selectedClientId;
 
-    private TerminalUiState() {
-    }
-
     public static TerminalUiState getInstance() {
         return INSTANCE;
     }

@@ -1,31 +1,30 @@
 package com.factoryonline.transport.tcp;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.KryoException;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 import com.factoryonline.foundation.ids.ClientId;
-import com.factoryonline.foundation.protocol.ClientTransportMessage;
-import com.factoryonline.foundation.protocol.ClientTransportMessageDTO;
-import com.factoryonline.foundation.protocol.ProtocolDTO;
+import com.factoryonline.transport.commands.ClientTransportCommand;
+import com.factoryonline.transport.commands.ProtocolCommand;
 import com.factoryonline.transport.ServerTransport;
 import com.factoryonline.transport.TransportMessage;
+import com.factoryonline.transport.kryo.KryoStreams;
 
 public final class TcpServerTransport implements ServerTransport, AutoCloseable {
     private final ServerSocket serverSocket;
     private final Thread acceptThread;
-    private final List<ClientTransportMessage> queuedMessages = new ArrayList<>();
+    private final List<ClientTransportCommand> queuedMessages = new ArrayList<>();
     private final Map<ClientId, ClientConnection> connectionsByClientId = new HashMap<>();
     private final List<Runnable> messageListeners = new ArrayList<>();
 
@@ -39,9 +38,9 @@ public final class TcpServerTransport implements ServerTransport, AutoCloseable 
     }
 
     @Override
-    public List<ClientTransportMessage> drainMessages() {
+    public List<ClientTransportCommand> drainMessages() {
         synchronized (queuedMessages) {
-            List<ClientTransportMessage> drainedMessages = List.copyOf(queuedMessages);
+            List<ClientTransportCommand> drainedMessages = List.copyOf(queuedMessages);
             queuedMessages.clear();
             return drainedMessages;
         }
@@ -119,7 +118,7 @@ public final class TcpServerTransport implements ServerTransport, AutoCloseable 
         }
     }
 
-    private void enqueue(ClientTransportMessage message) {
+    private void enqueue(ClientTransportCommand message) {
         synchronized (queuedMessages) {
             queuedMessages.add(message);
         }
@@ -182,8 +181,9 @@ public final class TcpServerTransport implements ServerTransport, AutoCloseable 
 
     private final class ClientConnection implements AutoCloseable {
         private final Socket socket;
-        private final BufferedReader reader;
-        private final BufferedWriter writer;
+        private final Kryo kryo;
+        private final Input input;
+        private final Output output;
         private final Thread readerThread;
         private final Object writeMonitor = new Object();
 
@@ -193,25 +193,26 @@ public final class TcpServerTransport implements ServerTransport, AutoCloseable 
         private ClientConnection(Socket socket) throws IOException {
             this.socket = Objects.requireNonNull(socket, "socket");
 
-            BufferedReader openedReader = null;
-            BufferedWriter openedWriter = null;
+            Input openedInput = null;
+            Output openedOutput = null;
             IOException initializationFailure = null;
             try {
-                openedReader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
-                openedWriter = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
+                openedInput = new Input(socket.getInputStream());
+                openedOutput = new Output(socket.getOutputStream());
             } catch (IOException exception) {
                 initializationFailure = exception;
             }
 
             if (initializationFailure != null) {
-                closeQuietly(openedReader);
-                closeQuietly(openedWriter);
+                closeQuietly(openedInput);
+                closeQuietly(openedOutput);
                 this.socket.close();
                 throw initializationFailure;
             }
 
-            this.reader = openedReader;
-            this.writer = openedWriter;
+            this.kryo = KryoStreams.createKryo();
+            this.input = openedInput;
+            this.output = openedOutput;
             this.readerThread = new Thread(this::readLoop, "tcp-server-client-reader-" + socket.getPort());
             this.readerThread.setDaemon(true);
         }
@@ -222,15 +223,19 @@ public final class TcpServerTransport implements ServerTransport, AutoCloseable 
 
         private void readLoop() {
             try {
-                String line;
-                while (!connectionClosed && (line = reader.readLine()) != null) {
-                    ClientTransportMessage message = ClientTransportMessageDTO.from(ProtocolDTO.deserialize(line).getData());
-                    clientId = message.getClientId();
+                while (!connectionClosed) {
+                    Object decodedObject = kryo.readClassAndObject(input);
+                    if (!(decodedObject instanceof ClientTransportCommand)) {
+                        throw new IllegalStateException("Server transport received non-client payload: " + decodedObject);
+                    }
+
+                    ClientTransportCommand message = (ClientTransportCommand) decodedObject;
+                    clientId = message.clientId;
                     registerConnection(clientId, this);
                     enqueue(message);
                 }
-            } catch (IOException exception) {
-                if (!connectionClosed && !closed) {
+            } catch (KryoException exception) {
+                if (!connectionClosed && !closed && !isEndOfStream(exception)) {
                     System.err.println("Server transport client read failed: " + exception.getMessage());
                 }
             } finally {
@@ -252,10 +257,9 @@ public final class TcpServerTransport implements ServerTransport, AutoCloseable 
                 }
 
                 try {
-                    writer.write(Objects.requireNonNull(message, "message").getPayload().serialize());
-                    writer.newLine();
-                    writer.flush();
-                } catch (IOException exception) {
+                    kryo.writeClassAndObject(output, Objects.requireNonNull(message, "message").getPayload());
+                    output.flush();
+                } catch (KryoException exception) {
                     throw new IllegalStateException("Failed to send server transport message", exception);
                 }
             }
@@ -272,25 +276,8 @@ public final class TcpServerTransport implements ServerTransport, AutoCloseable 
                 failure = exception;
             }
 
-            try {
-                reader.close();
-            } catch (IOException exception) {
-                if (failure == null) {
-                    failure = exception;
-                } else {
-                    failure.addSuppressed(exception);
-                }
-            }
-
-            try {
-                writer.close();
-            } catch (IOException exception) {
-                if (failure == null) {
-                    failure = exception;
-                } else {
-                    failure.addSuppressed(exception);
-                }
-            }
+            input.close();
+            output.close();
 
             if (failure != null) {
                 throw failure;
@@ -307,5 +294,10 @@ public final class TcpServerTransport implements ServerTransport, AutoCloseable 
             } catch (Exception ignored) {
             }
         }
+    }
+
+    private static boolean isEndOfStream(KryoException exception) {
+        String message = exception.getMessage();
+        return message != null && message.contains("Buffer underflow");
     }
 }

@@ -6,17 +6,10 @@ import com.factoryonline.foundation.timing.TickMode;
 import com.factoryonline.simulation.SimulationAugmentation;
 
 public abstract class ServerTerminalCommand {
-    private ServerTerminalCommand() {
-    }
-
     public static final class RequestSnapshot extends ServerTerminalCommand {
-        public RequestSnapshot() {
-        }
     }
 
     public static final class AddSimulation extends ServerTerminalCommand {
-        public AddSimulation() {
-        }
     }
 
     public static final class QueueManualTicks extends ServerTerminalCommand {

@@ -15,6 +15,7 @@ repositories {
 dependencies {
     implementation("org.jline:jline:4.0.12:jdk11")
     implementation("org.jline:jline-terminal-jni:4.0.12")
+    implementation("com.esotericsoftware:kryo:5.6.2")
 }
 
 java {

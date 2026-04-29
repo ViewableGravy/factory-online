@@ -5,12 +5,7 @@ import java.util.Objects;
 import com.factoryonline.simulation.SimulationAugmentation;
 
 public abstract class ClientTerminalCommand {
-    private ClientTerminalCommand() {
-    }
-
     public static final class RequestSnapshot extends ClientTerminalCommand {
-        public RequestSnapshot() {
-        }
     }
 
     public static final class SendSimulationInput extends ClientTerminalCommand {

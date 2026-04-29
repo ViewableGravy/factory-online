@@ -12,17 +12,14 @@ import com.factoryonline.foundation.config.TerminalCommands;
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
 import com.factoryonline.foundation.ids.SimulationIds;
-import com.factoryonline.foundation.protocol.AckMessageDTO;
-import com.factoryonline.foundation.protocol.ClientTransportMessage;
-import com.factoryonline.foundation.protocol.InitialSimulationStateDTO;
-import com.factoryonline.foundation.protocol.JoinSimulationRequest;
-import com.factoryonline.foundation.protocol.JoinSimulationRequestDTO;
-import com.factoryonline.foundation.protocol.ProtocolDTO;
-import com.factoryonline.foundation.protocol.ProtocolDTOContainer;
-import com.factoryonline.foundation.protocol.RejectionMessageDTO;
-import com.factoryonline.foundation.protocol.SimulationInputRequest;
-import com.factoryonline.foundation.protocol.SimulationInputRequestDTO;
-import com.factoryonline.foundation.protocol.TickSyncMessageDTO;
+import com.factoryonline.transport.commands.AckCommand;
+import com.factoryonline.transport.commands.ClientTransportCommand;
+import com.factoryonline.transport.commands.InitialSimulationStateCommand;
+import com.factoryonline.transport.commands.JoinSimulationCommand;
+import com.factoryonline.transport.commands.ProtocolCommand;
+import com.factoryonline.transport.commands.RejectionCommand;
+import com.factoryonline.transport.commands.SimulationInputCommand;
+import com.factoryonline.transport.commands.TickSyncCommand;
 import com.factoryonline.foundation.timing.TickControl;
 import com.factoryonline.simulation.Simulation;
 import com.factoryonline.simulation.SimulationActionResult;
@@ -78,7 +75,7 @@ public final class ServerApplication {
     }
 
     public void processIncomingMessages() {
-        for (ClientTransportMessage clientMessage : transport.drainMessages()) {
+        for (ClientTransportCommand clientMessage : transport.drainMessages()) {
             dispatchClientMessage(clientMessage);
         }
     }
@@ -155,40 +152,40 @@ public final class ServerApplication {
         broadcastCurrentTickState(currentSnapshotTick());
     }
 
-    private void dispatchClientMessage(ClientTransportMessage clientMessage) {
-        ClientTransportMessage validatedMessage = Objects.requireNonNull(clientMessage, "clientMessage");
-        ProtocolDTOContainer payload = validatedMessage.getPayload();
+    private void dispatchClientMessage(ClientTransportCommand clientMessage) {
+        ClientTransportCommand validatedMessage = Objects.requireNonNull(clientMessage, "clientMessage");
+        ProtocolCommand payload = validatedMessage.payload;
 
-        if (JoinSimulationRequestDTO.ID.equals(payload.getId())) {
-            handleJoinRequest(validatedMessage.getClientId(), ProtocolDTO.fromContainer(JoinSimulationRequestDTO.class, payload));
+        if (payload instanceof JoinSimulationCommand) {
+            handleJoinRequest(validatedMessage.clientId, (JoinSimulationCommand) payload);
             return;
         }
 
-        if (SimulationInputRequestDTO.ID.equals(payload.getId())) {
+        if (payload instanceof SimulationInputCommand) {
             handleSimulationInputRequest(
-                validatedMessage.getClientId(),
-                ProtocolDTO.fromContainer(SimulationInputRequestDTO.class, payload));
+                validatedMessage.clientId,
+                (SimulationInputCommand) payload);
             return;
         }
 
         System.out.println(
             TERMINAL_UI_STATE.formatServerLabel()
-                + " ignored unknown payload from " + TERMINAL_UI_STATE.formatClient(validatedMessage.getClientId())
-                + ": " + payload.getId().value());
+                + " ignored unknown payload from " + TERMINAL_UI_STATE.formatClient(validatedMessage.clientId)
+                + ": " + payload.getClass().getName());
     }
 
-    private void handleJoinRequest(ClientId clientId, JoinSimulationRequest joinRequest) {
+    private void handleJoinRequest(ClientId clientId, JoinSimulationCommand joinRequest) {
         Objects.requireNonNull(clientId, "clientId");
         Objects.requireNonNull(joinRequest, "joinRequest");
 
         if (sessionsByClientId.containsKey(clientId)) {
-            reject(clientId, joinRequest.getSimulationId(), "join rejected: duplicate session for client");
+            reject(clientId, joinRequest.simulationId, "join rejected: duplicate session for client");
             return;
         }
 
-        Simulation simulation = resolveRequestedSimulation(joinRequest.getSimulationId());
+        Simulation simulation = resolveRequestedSimulation(joinRequest.simulationId);
         if (simulation == null) {
-            reject(clientId, joinRequest.getSimulationId(), "join rejected: simulation not found");
+            reject(clientId, joinRequest.simulationId, "join rejected: simulation not found");
             return;
         }
 
@@ -199,9 +196,9 @@ public final class ServerApplication {
 
         broadcaster.subscribe(simulationId, clientId);
         int snapshotTick = currentSnapshotTick();
-        transport.send(clientId, new InitialSimulationStateDTO(simulationId, simulation.snapshot(), snapshotTick));
-        transport.send(clientId, new TickSyncMessageDTO(simulationId, snapshotTick, simulation.checksum(), getTickControl()));
-        transport.send(clientId, new AckMessageDTO(simulationId, ticker.getTick(), "join accepted"));
+        transport.send(clientId, new InitialSimulationStateCommand(simulationId, simulation.snapshot(), snapshotTick));
+        transport.send(clientId, new TickSyncCommand(simulationId, snapshotTick, simulation.checksum(), getTickControl()));
+        transport.send(clientId, new AckCommand(simulationId, ticker.getTick(), "join accepted"));
 
         System.out.println(
             TERMINAL_UI_STATE.formatServerLabel() + " accepted join from " + TERMINAL_UI_STATE.formatClient(clientId)
@@ -209,30 +206,30 @@ public final class ServerApplication {
                 + " at current server tick " + ticker.getTick());
     }
 
-    private void handleSimulationInputRequest(ClientId clientId, SimulationInputRequest inputRequest) {
+    private void handleSimulationInputRequest(ClientId clientId, SimulationInputCommand inputRequest) {
         Objects.requireNonNull(clientId, "clientId");
         Objects.requireNonNull(inputRequest, "inputRequest");
 
         Session session = sessionsByClientId.get(clientId);
         if (session == null) {
-            reject(clientId, inputRequest.getSimulationId(), "input rejected: no active session");
+            reject(clientId, inputRequest.simulationId, "input rejected: no active session");
             return;
         }
 
-        if (!session.getSimulationId().equals(inputRequest.getSimulationId())) {
-            reject(clientId, inputRequest.getSimulationId(), "input rejected: simulation does not match session");
+        if (!session.getSimulationId().equals(inputRequest.simulationId)) {
+            reject(clientId, inputRequest.simulationId, "input rejected: simulation does not match session");
             return;
         }
 
         int targetTick = ticker.getTick();
-        SimulationActionResult validationResult = queueValidatedInput(session, inputRequest.getAugmentation(), targetTick);
+        SimulationActionResult validationResult = queueValidatedInput(session, inputRequest.augmentation, targetTick);
         if (!validationResult.isSuccess()) {
-            reject(clientId, inputRequest.getSimulationId(), "input rejected: " + validationResult.getError());
+            reject(clientId, inputRequest.simulationId, "input rejected: " + validationResult.getError());
             return;
         }
 
-        transport.send(clientId, new AckMessageDTO(inputRequest.getSimulationId(), targetTick, "input accepted"));
-        broadcaster.broadcast(inputRequest.getSimulationId(), targetTick, inputRequest.getAugmentation());
+        transport.send(clientId, new AckCommand(inputRequest.simulationId, targetTick, "input accepted"));
+        broadcaster.broadcast(inputRequest.simulationId, targetTick, inputRequest.augmentation);
         System.out.println(
             TERMINAL_UI_STATE.formatServerLabel() + " accepted input from " + TERMINAL_UI_STATE.formatClient(clientId)
                 + " for tick " + targetTick
@@ -279,7 +276,7 @@ public final class ServerApplication {
     }
 
     private void reject(ClientId clientId, SimulationId simulationId, String message) {
-        transport.send(clientId, new RejectionMessageDTO(simulationId, ticker.getTick(), message));
+        transport.send(clientId, new RejectionCommand(simulationId, ticker.getTick(), message));
         System.out.println(
             TERMINAL_UI_STATE.formatServerLabel() + " rejected " + TERMINAL_UI_STATE.formatClient(clientId)
                 + ": " + message);
@@ -354,9 +351,6 @@ public final class ServerApplication {
         private SimulationRegistry registry;
         private Broadcaster broadcaster;
         private SimulationIdFactory simulationIdFactory;
-
-        private Builder() {
-        }
 
         public Builder transport(ServerTransport transport) {
             this.transport = Objects.requireNonNull(transport, "transport");

@@ -3,7 +3,7 @@ package com.factoryonline.transport;
 import java.util.List;
 
 import com.factoryonline.foundation.ids.ClientId;
-import com.factoryonline.foundation.protocol.ProtocolDTO;
+import com.factoryonline.transport.commands.ProtocolCommand;
 
 public interface ClientTransport {
     ClientId getClientId();
@@ -14,11 +14,11 @@ public interface ClientTransport {
 
     void addMessageListener(Runnable listener);
 
-    default void send(ProtocolDTO<?> dto, boolean delayed) {
-        send(new TransportMessage(dto), delayed);
+    default void send(ProtocolCommand command, boolean delayed) {
+        send(new TransportMessage(command), delayed);
     }
 
     int getCurrentTick();
 
-    <T, D extends ProtocolDTO<T>> List<T> drainAs(Class<D> dtoClass);
+    <T extends ProtocolCommand> List<T> drainAs(Class<T> commandClass);
 }

@@ -10,18 +10,13 @@ import com.factoryonline.foundation.config.RuntimeTiming;
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
 import com.factoryonline.foundation.ids.SimulationIds;
-import com.factoryonline.foundation.protocol.AckMessage;
-import com.factoryonline.foundation.protocol.AckMessageDTO;
-import com.factoryonline.foundation.protocol.InitialSimulationState;
-import com.factoryonline.foundation.protocol.InitialSimulationStateDTO;
-import com.factoryonline.foundation.protocol.JoinSimulationRequestDTO;
-import com.factoryonline.foundation.protocol.RejectionMessage;
-import com.factoryonline.foundation.protocol.RejectionMessageDTO;
-import com.factoryonline.foundation.protocol.SimulationInputRequestDTO;
-import com.factoryonline.foundation.protocol.SimulationUpdate;
-import com.factoryonline.foundation.protocol.SimulationUpdateDTO;
-import com.factoryonline.foundation.protocol.TickSyncMessage;
-import com.factoryonline.foundation.protocol.TickSyncMessageDTO;
+import com.factoryonline.transport.commands.AckCommand;
+import com.factoryonline.transport.commands.InitialSimulationStateCommand;
+import com.factoryonline.transport.commands.JoinSimulationCommand;
+import com.factoryonline.transport.commands.RejectionCommand;
+import com.factoryonline.transport.commands.SimulationInputCommand;
+import com.factoryonline.transport.commands.SimulationUpdateCommand;
+import com.factoryonline.transport.commands.TickSyncCommand;
 import com.factoryonline.foundation.timing.TickControl;
 import com.factoryonline.server.bootstrap.BatchedSimulationRunner;
 import com.factoryonline.server.bootstrap.TerminalUiState;
@@ -64,7 +59,7 @@ public final class ClientApplication {
             return;
         }
 
-        transport.send(new JoinSimulationRequestDTO(requestedSimulationId), false);
+        transport.send(new JoinSimulationCommand(requestedSimulationId), false);
         joinRequested = true;
         System.out.println(
             "Client " + TERMINAL_UI_STATE.formatClient(clientId)
@@ -140,7 +135,7 @@ public final class ClientApplication {
         }
 
         SimulationAugmentation validatedAugmentation = Objects.requireNonNull(augmentation, "augmentation");
-        transport.send(new SimulationInputRequestDTO(simulationId, validatedAugmentation), true);
+        transport.send(new SimulationInputCommand(simulationId, validatedAugmentation), true);
 
         System.out.println(
             "Client " + TERMINAL_UI_STATE.formatClient(clientId)
@@ -191,83 +186,83 @@ public final class ClientApplication {
     }
 
     private void receiveInitialStates() {
-        for (InitialSimulationState initialState : transport.drainAs(InitialSimulationStateDTO.class)) {
+        for (InitialSimulationStateCommand initialState : transport.drainAs(InitialSimulationStateCommand.class)) {
             attachSimulation(initialState);
         }
     }
 
     private void receiveTickSyncMessages() {
-        for (TickSyncMessage tickSyncMessage : transport.drainAs(TickSyncMessageDTO.class)) {
-            int observedTransportDelayTicks = Math.max(0, transport.getCurrentTick() - tickSyncMessage.getServerTick());
-            TickSyncState previousState = tickSyncStatesBySimulation.get(tickSyncMessage.getSimulationId());
+        for (TickSyncCommand tickSyncMessage : transport.drainAs(TickSyncCommand.class)) {
+            int observedTransportDelayTicks = Math.max(0, transport.getCurrentTick() - tickSyncMessage.serverTick);
+            TickSyncState previousState = tickSyncStatesBySimulation.get(tickSyncMessage.simulationId);
             double pacingAdjustmentCredit = previousState == null ? 0.0D : previousState.pacingAdjustmentCredit;
             
             tickSyncStatesBySimulation.put(
-                tickSyncMessage.getSimulationId(),
+                tickSyncMessage.simulationId,
                 new TickSyncState(
-                    tickSyncMessage.getServerTick(),
+                    tickSyncMessage.serverTick,
                     transport.getCurrentTick(),
                     observedTransportDelayTicks,
                     pacingAdjustmentCredit,
-                    tickSyncMessage.getTickControl()
+                    tickSyncMessage.tickControl
                 )
             );
-            tickControl = tickSyncMessage.getTickControl();
+            tickControl = tickSyncMessage.tickControl;
             queueChecksum(tickSyncMessage);
         }
     }
 
     private void receiveAcknowledgements() {
-        for (AckMessage ackMessage : transport.drainAs(AckMessageDTO.class)) {
+        for (AckCommand ackMessage : transport.drainAs(AckCommand.class)) {
             System.out.println(
                 "Client " + TERMINAL_UI_STATE.formatClient(clientId)
-                    + " received Ack for " + TERMINAL_UI_STATE.formatSimulation(ackMessage.getSimulationId())
-                    + " at tick " + ackMessage.getTick() + ": " + ackMessage.getMessage());
+                    + " received Ack for " + TERMINAL_UI_STATE.formatSimulation(ackMessage.simulationId)
+                    + " at tick " + ackMessage.tick + ": " + ackMessage.message);
         }
     }
 
     private void receiveRejections() {
-        for (RejectionMessage rejectionMessage : transport.drainAs(RejectionMessageDTO.class)) {
+        for (RejectionCommand rejectionMessage : transport.drainAs(RejectionCommand.class)) {
             System.out.println(
                 "Client " + TERMINAL_UI_STATE.formatClient(clientId)
-                    + " received Rej for " + TERMINAL_UI_STATE.formatSimulation(rejectionMessage.getSimulationId())
-                    + " at tick " + rejectionMessage.getTick() + ": " + rejectionMessage.getMessage());
+                    + " received Rej for " + TERMINAL_UI_STATE.formatSimulation(rejectionMessage.simulationId)
+                    + " at tick " + rejectionMessage.tick + ": " + rejectionMessage.message);
         }
     }
 
     private synchronized void receiveSimulationUpdates() {
-        for (SimulationUpdate simulationUpdate : transport.drainAs(SimulationUpdateDTO.class)) {
+        for (SimulationUpdateCommand simulationUpdate : transport.drainAs(SimulationUpdateCommand.class)) {
             queuedActionsBySimulation
-                .computeIfAbsent(simulationUpdate.getSimulationId(), ignored -> new HashMap<>())
-                .put(simulationUpdate.getTick(), simulationUpdate.getAugmentation());
+                .computeIfAbsent(simulationUpdate.simulationId, ignored -> new HashMap<>())
+                .put(simulationUpdate.tick, simulationUpdate.augmentation);
             System.out.println(
                 "Client " + TERMINAL_UI_STATE.formatClient(clientId)
-                    + " queued update for tick " + simulationUpdate.getTick()
-                    + " on " + TERMINAL_UI_STATE.formatSimulation(simulationUpdate.getSimulationId()));
+                    + " queued update for tick " + simulationUpdate.tick
+                    + " on " + TERMINAL_UI_STATE.formatSimulation(simulationUpdate.simulationId));
         }
     }
 
-    private void attachSimulation(InitialSimulationState initialState) {
-        if (attachedSimulationIds.contains(initialState.getSimulationId())) {
+    private void attachSimulation(InitialSimulationStateCommand initialState) {
+        if (attachedSimulationIds.contains(initialState.simulationId)) {
             return;
         }
 
         if (ticker == null || runner == null) {
-            ticker = new Ticker(initialState.getTick());
+            ticker = new Ticker(initialState.tick);
             runner = new BatchedSimulationRunner(1, "client");
             remainingStartupBufferTicks = Math.max(0, RuntimeTiming.CLIENT_TARGET_LOCAL_BUFFER_TICKS - 1);
         }
 
-        Simulation bufferedSimulation = new Simulation(initialState.getSimulationId(), initialState.getSnapshot());
+        Simulation bufferedSimulation = new Simulation(initialState.simulationId, initialState.snapshot);
         simulationRegistry.register(bufferedSimulation);
-        attachedSimulationIds.add(initialState.getSimulationId());
-        joinedSimulationId = initialState.getSimulationId();
+        attachedSimulationIds.add(initialState.simulationId);
+        joinedSimulationId = initialState.simulationId;
         runner.addSimulation(bufferedSimulation);
 
         System.out.println(
             "Client " + TERMINAL_UI_STATE.formatClient(clientId)
                 + " attached " + TERMINAL_UI_STATE.formatSimulation(bufferedSimulation.getId())
-                + " at snapshot tick " + initialState.getTick()
+                + " at snapshot tick " + initialState.tick
                 + " with startup buffer " + RuntimeTiming.CLIENT_TARGET_LOCAL_BUFFER_TICKS);
     }
 
@@ -325,16 +320,16 @@ public final class ClientApplication {
         return 1;
     }
 
-    private void queueChecksum(TickSyncMessage tickSyncMessage) {
-        SimulationId simulationId = tickSyncMessage.getSimulationId();
+    private void queueChecksum(TickSyncCommand tickSyncMessage) {
+        SimulationId simulationId = tickSyncMessage.simulationId;
         if (joinedSimulationId == null || !joinedSimulationId.equals(simulationId)) {
             return;
         }
 
-        if (ticker != null && ticker.getTick() > tickSyncMessage.getServerTick()) {
+        if (ticker != null && ticker.getTick() > tickSyncMessage.serverTick) {
             System.out.println(
                 "Client " + TERMINAL_UI_STATE.formatClient(clientId)
-                    + " skipped late checksum for tick " + tickSyncMessage.getServerTick()
+                    + " skipped late checksum for tick " + tickSyncMessage.serverTick
                     + " on " + TERMINAL_UI_STATE.formatSimulation(simulationId)
                     + " because local simulation is already at tick " + ticker.getTick());
             return;
@@ -342,7 +337,7 @@ public final class ClientApplication {
 
         queuedChecksumsBySimulation
             .computeIfAbsent(simulationId, ignored -> new HashMap<>())
-            .put(tickSyncMessage.getServerTick(), tickSyncMessage.getServerChecksum());
+            .put(tickSyncMessage.serverTick, tickSyncMessage.serverChecksum);
     }
 
     private void compareQueuedChecksum(int tick) {

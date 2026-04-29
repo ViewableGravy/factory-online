@@ -19,9 +19,6 @@ import com.factoryonline.simulation.SimulationRegistry;
 import com.factoryonline.transport.tcp.TcpServerTransport;
 
 public final class Main {
-    private Main() {
-    }
-
     public static void main(String[] args) throws IOException {
         ServerApplication server = null;
         ServerRuntimeLoop loop = null;

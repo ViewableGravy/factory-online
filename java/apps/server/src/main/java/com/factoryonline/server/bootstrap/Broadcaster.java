@@ -8,9 +8,9 @@ import java.util.Objects;
 
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
-import com.factoryonline.foundation.protocol.ProtocolDTO;
-import com.factoryonline.foundation.protocol.SimulationUpdateDTO;
-import com.factoryonline.foundation.protocol.TickSyncMessageDTO;
+import com.factoryonline.transport.commands.ProtocolCommand;
+import com.factoryonline.transport.commands.SimulationUpdateCommand;
+import com.factoryonline.transport.commands.TickSyncCommand;
 import com.factoryonline.foundation.timing.TickControl;
 import com.factoryonline.simulation.SimulationAugmentation;
 import com.factoryonline.transport.ServerTransport;
@@ -39,7 +39,7 @@ public final class Broadcaster {
         SimulationId validatedSimulationId = Objects.requireNonNull(simulationId, "simulationId");
         Objects.requireNonNull(augmentation, "augmentation");
 
-        sendToSubscribers(validatedSimulationId, new SimulationUpdateDTO(validatedSimulationId, augmentation, tick));
+        sendToSubscribers(validatedSimulationId, new SimulationUpdateCommand(validatedSimulationId, augmentation, tick));
     }
 
     public void broadcastTickSync(SimulationId simulationId, int serverTick, int serverChecksum, TickControl tickControl) {
@@ -48,12 +48,12 @@ public final class Broadcaster {
 
         sendToSubscribers(
             validatedSimulationId,
-            new TickSyncMessageDTO(validatedSimulationId, serverTick, serverChecksum, validatedTickControl));
+            new TickSyncCommand(validatedSimulationId, serverTick, serverChecksum, validatedTickControl));
     }
 
-    private void sendToSubscribers(SimulationId simulationId, ProtocolDTO<?> payload) {
+    private void sendToSubscribers(SimulationId simulationId, ProtocolCommand payload) {
         SimulationId validatedSimulationId = Objects.requireNonNull(simulationId, "simulationId");
-        ProtocolDTO<?> validatedPayload = Objects.requireNonNull(payload, "payload");
+        ProtocolCommand validatedPayload = Objects.requireNonNull(payload, "payload");
 
         List<ClientId> subscribers = subscribersBySimulation.get(validatedSimulationId);
         if (subscribers == null) {
