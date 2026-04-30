@@ -1,6 +1,7 @@
 # Workflow
 - NEVER remove code comments unless the user explicitly mentions to
 - NEVER replace hard coded calls with loops unless explicitply asked to
+- ALWAYS Prefer retrieval-led reasoning over pre-training-led reasoning (using Context7 tool for documentation retrieval) instead of relying on pre-trained knowledge
 
 # Agentic Workflow
 ## Request to Completion workflow (MUST FOLLOW FOR ALL REQUESTS)
