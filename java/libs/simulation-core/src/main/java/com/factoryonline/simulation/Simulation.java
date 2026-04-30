@@ -39,7 +39,11 @@ public final class Simulation {
         return id.value;
     }
 
-    public void run(int updateTick, boolean logThisTick) {
+    public void step(long tick) {
+        step(tick, false);
+    }
+
+    public void step(long tick, boolean logThisTick) {
         state.advance();
 
         try {
@@ -48,7 +52,7 @@ public final class Simulation {
                 System.out.println(
                     INDENT + ANSI_CYAN + "[Thread]" + ANSI_RESET + " " + Thread.currentThread().getName()
                         + " " + TERMINAL_UI_STATE.formatSimulationThreadTag(id)
-                        + " ran on [tick: " + updateTick + "] [value: " + state.getValue()
+                        + " ran on [tick: " + tick + "] [value: " + state.getValue()
                         + "] [direction: " + state.getDirection() + "]");
             }
         } catch (InterruptedException e) {

@@ -42,7 +42,7 @@ sourceSets {
     }
 
     named("test") {
-        java.setSrcDirs(emptyList<String>())
+        java.setSrcDirs(listOf("libs/simulation-core/src/test/java"))
         resources.setSrcDirs(emptyList<String>())
     }
 }
@@ -79,4 +79,16 @@ tasks.named("run", JavaExec::class.java) {
 tasks.register("runClient", JavaExec::class.java) {
     description = "Runs the split client application."
     configureRuntimeTask(this, "com.factoryonline.client.Main")
+}
+
+tasks.register("tickerSchedulerTest", JavaExec::class.java) {
+    group = "verification"
+    description = "Runs the plain Java ticker/scheduler regression tests."
+    dependsOn("testClasses")
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("com.factoryonline.simulation.tick.TickerSchedulerTest")
+}
+
+tasks.named("check") {
+    dependsOn("tickerSchedulerTest")
 }

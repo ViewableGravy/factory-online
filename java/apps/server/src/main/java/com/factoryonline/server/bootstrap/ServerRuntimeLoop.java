@@ -77,11 +77,9 @@ public final class ServerRuntimeLoop {
                 int requestedTicks = tickController.drainRequestedManualTicks();
                 for (int tickIndex = 0; tickIndex < requestedTicks; tickIndex += 1) {
                     server.advanceTick();
-                    server.simulateCurrentTick();
                 }
             } else if (automaticTickDue) {
                 server.advanceTick();
-                server.simulateCurrentTick();
             }
 
             awaitEnd(updatedTickControl);

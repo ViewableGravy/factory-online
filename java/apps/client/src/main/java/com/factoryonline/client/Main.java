@@ -12,6 +12,7 @@ import com.factoryonline.foundation.ids.SimulationIds;
 import com.factoryonline.foundation.scheduler.LoopCadence;
 import com.factoryonline.foundation.terminal.TerminalCommandHandler;
 import com.factoryonline.server.bootstrap.TerminalUiState;
+import com.factoryonline.simulation.tick.Scheduler;
 import com.factoryonline.transport.tcp.TcpClientTransport;
 
 public final class Main {
@@ -28,33 +29,20 @@ public final class Main {
 
         ClientApplication client = new ClientApplication(clientId, SimulationIds.RANDOM, transport);
         ClientRuntimeLoop runtimeLoop = new ClientRuntimeLoop(client, transport);
-        
+
+        Scheduler.register(client::applyQueuedActions);
+        Scheduler.register(client::runAttachedSimulations);
+        Scheduler.register(client::compareQueuedChecksum);
+
         client.setup();
         runtimeLoop.start();
 
         printConnectedMessage();
 
-        try {
-            try (TerminalCommandHandler commandHandler = TerminalCommandHandler.createClientHandler()) {
-                String rawCommand;
-
-                while ((rawCommand = commandHandler.readCommand(prompt())) != null) {
-                    String normalizedCommand = rawCommand.strip();
-
-                    if (TerminalCommands.EXIT_COMMAND.equalsIgnoreCase(normalizedCommand)
-                        || TerminalCommands.ESCAPE_COMMAND.equalsIgnoreCase(normalizedCommand)) {
-                        break;
-                    }
-
-                    if (!normalizedCommand.isEmpty()) {
-                        runtimeLoop.submitInput(rawCommand);
-                    }
-                }
-            }
-        } finally {
-            runtimeLoop.stop();
-            client.cleanup();
-        }
+        TerminalCommandHandler.awaitClientCommands(prompt(), runtimeLoop::submitInput);
+        
+        runtimeLoop.stop();
+        client.cleanup();
     }
 
     private static String prompt() {

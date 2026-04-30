@@ -13,11 +13,11 @@ import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
 import com.factoryonline.foundation.ids.SimulationIds;
 import com.factoryonline.foundation.timing.TickControl;
-import com.factoryonline.foundation.timing.Ticker;
 import com.factoryonline.simulation.Simulation;
 import com.factoryonline.simulation.SimulationActionResult;
 import com.factoryonline.simulation.SimulationAugmentation;
 import com.factoryonline.simulation.SimulationRegistry;
+import com.factoryonline.simulation.tick.Ticker;
 import com.factoryonline.transport.ServerTransport;
 import com.factoryonline.transport.commands.AckCommand;
 import com.factoryonline.transport.commands.ClientTransportCommand;
@@ -41,12 +41,10 @@ public final class ServerApplication {
     private final Map<ClientId, Session> sessionsByClientId = new HashMap<>();
     private final Map<Integer, List<BufferedSimulationInput>> bufferedInputsByTick = new HashMap<>();
     private final Map<Integer, Map<SimulationId, Simulation>> validationSimulationsByTick = new HashMap<>();
-    private int pendingSimulationTick = -1;
 
     public ServerApplication(ServerTransport transport) {
         this(builder()
             .transport(transport)
-            .ticker(new Ticker())
             .tickController(ServerTickController.automatic())
             .runner(new BatchedSimulationRunner(2, "server"))
             .registry(new SimulationRegistry())
@@ -82,19 +80,7 @@ public final class ServerApplication {
     }
 
     public void advanceTick() {
-        pendingSimulationTick = ticker.tick();
-    }
-
-    public void simulateCurrentTick() {
-        if (pendingSimulationTick <= 0)
-            return;
-
-        applyBufferedInputs(pendingSimulationTick);
-        runner.runTick(pendingSimulationTick);
-        if (shouldBroadcastTickSync(pendingSimulationTick)) {
-            broadcastCurrentTickState(pendingSimulationTick);
-        }
-        pendingSimulationTick = -1;
+        ticker.tick();
     }
 
     private synchronized TickControl getTickControl() {
@@ -102,7 +88,6 @@ public final class ServerApplication {
     }
 
     public void cleanup() {
-        ticker.shutdown();
         runner.close();
     }
 
@@ -199,12 +184,12 @@ public final class ServerApplication {
         int snapshotTick = currentSnapshotTick();
         transport.send(clientId, new InitialSimulationStateCommand(simulationId, simulation.snapshot(), snapshotTick));
         transport.send(clientId, new TickSyncCommand(simulationId, snapshotTick, simulation.checksum(), getTickControl()));
-        transport.send(clientId, new AckCommand(simulationId, ticker.getTick(), "join accepted"));
+        transport.send(clientId, new AckCommand(simulationId, currentTick(), "join accepted"));
 
         System.out.println(
             TERMINAL_UI_STATE.formatServerLabel() + " accepted join from " + TERMINAL_UI_STATE.formatClient(clientId)
                 + " for " + TERMINAL_UI_STATE.formatSimulation(simulationId)
-                + " at current server tick " + ticker.getTick());
+                + " at current server tick " + currentTick());
     }
 
     private void handleSimulationInputRequest(ClientId clientId, SimulationInputCommand inputRequest) {
@@ -259,12 +244,13 @@ public final class ServerApplication {
     }
 
     private int nextInputTargetTick() {
-        return ticker.getTick() + RuntimeTiming.SERVER_INPUT_LEAD_TICKS;
+        return currentTick() + RuntimeTiming.SERVER_INPUT_LEAD_TICKS;
     }
 
-    private void applyBufferedInputs(int tick) {
-        List<BufferedSimulationInput> bufferedInputs = bufferedInputsByTick.remove(tick);
-        validationSimulationsByTick.remove(tick);
+    public void applyBufferedInputs(long tick) {
+        int protocolTick = toProtocolTick(tick);
+        List<BufferedSimulationInput> bufferedInputs = bufferedInputsByTick.remove(protocolTick);
+        validationSimulationsByTick.remove(protocolTick);
         if (bufferedInputs == null || bufferedInputs.isEmpty()) {
             return;
         }
@@ -281,7 +267,7 @@ public final class ServerApplication {
     }
 
     private void reject(ClientId clientId, SimulationId simulationId, String message) {
-        transport.send(clientId, new RejectionCommand(simulationId, ticker.getTick(), message));
+        transport.send(clientId, new RejectionCommand(simulationId, currentTick(), message));
         System.out.println(
             TERMINAL_UI_STATE.formatServerLabel() + " rejected " + TERMINAL_UI_STATE.formatClient(clientId)
                 + ": " + message);
@@ -310,11 +296,7 @@ public final class ServerApplication {
     }
 
     private int currentSnapshotTick() {
-        if (pendingSimulationTick > 0) {
-            return pendingSimulationTick - 1;
-        }
-
-        return ticker.getTick();
+        return currentTick();
     }
 
     private void registerSimulation(Simulation simulation) {
@@ -336,6 +318,25 @@ public final class ServerApplication {
                 simulation.checksum(),
                 currentTickControl);
         }
+    }
+
+    public void broadcastCurrentTickStateIfDue(long tick) {
+        int simulationTick = toProtocolTick(tick);
+        if (shouldBroadcastTickSync(simulationTick)) {
+            broadcastCurrentTickState(simulationTick);
+        }
+    }
+
+    private int currentTick() {
+        return toProtocolTick(ticker.getCurrentTick());
+    }
+
+    private int toProtocolTick(long tick) {
+        if (tick > Integer.MAX_VALUE) {
+            throw new IllegalStateException("tick exceeds protocol range: " + tick);
+        }
+
+        return (int) tick;
     }
 
     private static final class BufferedSimulationInput {

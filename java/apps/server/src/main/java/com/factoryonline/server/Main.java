@@ -8,7 +8,6 @@ import com.factoryonline.foundation.config.TerminalCommands;
 import com.factoryonline.foundation.scheduler.LoopCadence;
 import com.factoryonline.foundation.terminal.TerminalCommandHandler;
 import com.factoryonline.foundation.timing.TickControl;
-import com.factoryonline.foundation.timing.Ticker;
 import com.factoryonline.server.bootstrap.BatchedSimulationRunner;
 import com.factoryonline.server.bootstrap.Broadcaster;
 import com.factoryonline.server.bootstrap.ServerApplication;
@@ -17,6 +16,8 @@ import com.factoryonline.server.bootstrap.ServerTickController;
 import com.factoryonline.server.bootstrap.SimulationIdFactory;
 import com.factoryonline.server.bootstrap.TerminalUiState;
 import com.factoryonline.simulation.SimulationRegistry;
+import com.factoryonline.simulation.tick.Scheduler;
+import com.factoryonline.simulation.tick.Ticker;
 import com.factoryonline.transport.tcp.TcpServerTransport;
 
 public final class Main {
@@ -45,6 +46,10 @@ public final class Main {
                 .simulationIdFactory(simulationIdFactory)
                 .build()
                 .configureDefault();
+
+            Scheduler.register(server::applyBufferedInputs);
+            Scheduler.register(runner::runTick);
+            Scheduler.register(server::broadcastCurrentTickStateIfDue);
 
             loop = new ServerRuntimeLoop(server, tickController, transport);
 

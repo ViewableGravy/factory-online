@@ -11,14 +11,13 @@ import com.factoryonline.foundation.config.RuntimeTiming;
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.foundation.ids.SimulationId;
 import com.factoryonline.foundation.ids.SimulationIds;
-import com.factoryonline.foundation.scheduler.TickScheduler;
 import com.factoryonline.foundation.timing.TickControl;
-import com.factoryonline.foundation.timing.Ticker;
 import com.factoryonline.server.bootstrap.BatchedSimulationRunner;
 import com.factoryonline.server.bootstrap.TerminalUiState;
 import com.factoryonline.simulation.Simulation;
 import com.factoryonline.simulation.SimulationAugmentation;
 import com.factoryonline.simulation.SimulationRegistry;
+import com.factoryonline.simulation.tick.Ticker;
 import com.factoryonline.transport.ClientTransport;
 import com.factoryonline.transport.commands.AckCommand;
 import com.factoryonline.transport.commands.InitialSimulationStateCommand;
@@ -42,8 +41,9 @@ public final class ClientApplication {
     private final Map<SimulationId, Map<Integer, SimulationAugmentation>> queuedActionsBySimulation = new HashMap<>();
     private final Map<SimulationId, Map<Integer, Integer>> queuedChecksumsBySimulation = new HashMap<>();
     private final Set<SimulationId> attachedSimulationIds = new HashSet<>();
-    private TickScheduler tickScheduler;
+    private final Ticker ticker = new Ticker();
     private BatchedSimulationRunner runner;
+    private int startupBufferTicks;
     private boolean joinRequested;
     private SimulationId joinedSimulationId;
 
@@ -77,22 +77,21 @@ public final class ClientApplication {
     public void tick() {
         processIncomingMessages();
         scheduleTicks(true);
-        simulateCurrentTick();
     }
 
     public void scheduleTicks(boolean automaticTickDue) {
-        if (tickScheduler == null || runner == null) {
+        if (runner == null) {
             return;
         }
 
         int requestedTicks = tickSynchronizer.requestTicks(
             joinedSimulationId,
-            tickScheduler.getTick(),
+            currentSimulationTick(),
             transport.getCurrentTick(),
             automaticTickDue
         );
-        
-        tickScheduler.queueTicks(requestedTicks);
+
+        queueTicks(requestedTicks);
     }
 
     public TickControl getTickControl() {
@@ -112,11 +111,11 @@ public final class ClientApplication {
     }
 
     public int getLocalSimulationTick() {
-        if (tickScheduler == null) {
+        if (runner == null) {
             return -1;
         }
 
-        return tickScheduler.getTick();
+        return currentSimulationTick();
     }
 
     public void requestSnapshot() {
@@ -142,31 +141,20 @@ public final class ClientApplication {
                 + " on transport tick " + transport.getCurrentTick());
     }
 
-    public void simulateCurrentTick() {
-        if (tickScheduler == null || runner == null) {
-            return;
-        }
-
-        tickScheduler.runQueuedTicks();
-    }
-
     public void cleanup() {
-        if (tickScheduler != null) {
-            tickScheduler.shutdown();
-        }
-
         if (runner != null) {
             runner.close();
         }
     }
 
-    private synchronized void applyQueuedActions(int tick) {
+    public synchronized void applyQueuedActions(long tick) {
+        int protocolTick = toProtocolTick(tick);
         for (var entry : queuedActionsBySimulation.entrySet()) {
             if (!attachedSimulationIds.contains(entry.getKey())) {
                 continue;
             }
 
-            SimulationAugmentation augmentation = entry.getValue().remove(tick);
+            SimulationAugmentation augmentation = entry.getValue().remove(protocolTick);
             if (augmentation == null) {
                 continue;
             }
@@ -174,6 +162,44 @@ public final class ClientApplication {
             Simulation simulation = simulationRegistry.get(entry.getKey());
             simulation.applyAction(augmentation);
         }
+    }
+
+    public void runAttachedSimulations(long tick) {
+        if (runner == null) {
+            return;
+        }
+
+        runner.runTick(tick);
+    }
+
+    public void compareQueuedChecksum(long tick) {
+        int protocolTick = toProtocolTick(tick);
+        SimulationId activeSimulationId = joinedSimulationId;
+        if (activeSimulationId == null) {
+            return;
+        }
+
+        Map<Integer, Integer> queuedChecksums = queuedChecksumsBySimulation.get(activeSimulationId);
+        if (queuedChecksums == null) {
+            return;
+        }
+
+        Integer expectedChecksum = queuedChecksums.remove(protocolTick);
+        if (expectedChecksum == null) {
+            return;
+        }
+
+        Simulation simulation = simulationRegistry.get(activeSimulationId);
+        int localChecksum = simulation.checksum();
+        if (localChecksum == expectedChecksum.intValue()) {
+            return;
+        }
+
+        System.out.println(
+            "Client " + TERMINAL_UI_STATE.formatClient(clientId)
+                + " checksum mismatch at tick " + protocolTick
+                + " on " + TERMINAL_UI_STATE.formatSimulation(activeSimulationId)
+                + " (local " + localChecksum + ", server " + expectedChecksum + ")");
     }
 
     private void receiveInitialStates() {
@@ -224,10 +250,10 @@ public final class ClientApplication {
             return;
         }
 
-        if (tickScheduler == null || runner == null) {
+        if (runner == null) {
             runner = new BatchedSimulationRunner(1, "client");
-            tickScheduler = new TickScheduler(new Ticker(initialState.tick), this::runSimulationTick);
-            tickScheduler.setStartupBufferTicks(Math.max(0, RuntimeTiming.CLIENT_TARGET_LOCAL_BUFFER_TICKS - 1));
+            ticker.queueInitialize(initialState.tick);
+            startupBufferTicks = Math.max(0, RuntimeTiming.CLIENT_TARGET_LOCAL_BUFFER_TICKS - 1);
         }
 
         Simulation bufferedSimulation = new Simulation(initialState.simulationId, initialState.snapshot);
@@ -249,47 +275,18 @@ public final class ClientApplication {
             return;
         }
 
-        if (tickScheduler != null && tickScheduler.getTick() > tickSyncMessage.serverTick) {
+        if (currentSimulationTick() > tickSyncMessage.serverTick) {
             System.out.println(
                 "Client " + TERMINAL_UI_STATE.formatClient(clientId)
                     + " skipped late checksum for tick " + tickSyncMessage.serverTick
                     + " on " + TERMINAL_UI_STATE.formatSimulation(simulationId)
-                    + " because local simulation is already at tick " + tickScheduler.getTick());
+                    + " because local simulation is already at tick " + currentSimulationTick());
             return;
         }
 
         queuedChecksumsBySimulation
             .computeIfAbsent(simulationId, ignored -> new HashMap<>())
             .put(tickSyncMessage.serverTick, tickSyncMessage.serverChecksum);
-    }
-
-    private void compareQueuedChecksum(int tick) {
-        SimulationId activeSimulationId = joinedSimulationId;
-        if (activeSimulationId == null) {
-            return;
-        }
-
-        Map<Integer, Integer> queuedChecksums = queuedChecksumsBySimulation.get(activeSimulationId);
-        if (queuedChecksums == null) {
-            return;
-        }
-
-        Integer expectedChecksum = queuedChecksums.remove(tick);
-        if (expectedChecksum == null) {
-            return;
-        }
-
-        Simulation simulation = simulationRegistry.get(activeSimulationId);
-        int localChecksum = simulation.checksum();
-        if (localChecksum == expectedChecksum.intValue()) {
-            return;
-        }
-
-        System.out.println(
-            "Client " + TERMINAL_UI_STATE.formatClient(clientId)
-                + " checksum mismatch at tick " + tick
-                + " on " + TERMINAL_UI_STATE.formatSimulation(activeSimulationId)
-                + " (local " + localChecksum + ", server " + expectedChecksum + ")");
     }
 
     private String formatRequestedSimulation() {
@@ -300,9 +297,32 @@ public final class ClientApplication {
         return TERMINAL_UI_STATE.formatSimulation(requestedSimulationId);
     }
 
-    private void runSimulationTick(int simulationTick) {
-        applyQueuedActions(simulationTick);
-        runner.runTick(simulationTick);
-        compareQueuedChecksum(simulationTick);
+    private void queueTicks(int requestedTicks) {
+        if (requestedTicks < 0) {
+            throw new IllegalArgumentException("requestedTicks must not be negative");
+        }
+
+        int ticksToRun = requestedTicks;
+        if (startupBufferTicks > 0) {
+            int bufferedTicks = Math.min(startupBufferTicks, ticksToRun);
+            startupBufferTicks -= bufferedTicks;
+            ticksToRun -= bufferedTicks;
+        }
+
+        for (int tickIndex = 0; tickIndex < ticksToRun; tickIndex += 1) {
+            ticker.tick();
+        }
+    }
+
+    private int currentSimulationTick() {
+        return toProtocolTick(ticker.getCurrentTick());
+    }
+
+    private int toProtocolTick(long tick) {
+        if (tick > Integer.MAX_VALUE) {
+            throw new IllegalStateException("tick exceeds protocol range: " + tick);
+        }
+
+        return (int) tick;
     }
 }

@@ -4,6 +4,8 @@ import static org.jline.builtins.Completers.TreeCompleter.node;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.Objects;
+import java.util.function.Consumer;
 
 import org.jline.builtins.Completers.TreeCompleter;
 import org.jline.keymap.KeyMap;
@@ -41,6 +43,30 @@ public final class TerminalCommandHandler implements Closeable {
 
     public static TerminalCommandHandler createServerHandler() throws IOException {
         return new TerminalCommandHandler(createServerCompleter(), false);
+    }
+
+    public static void awaitClientCommands(String prompt, Consumer<String> submitCommand) {
+        String validatedPrompt = Objects.requireNonNull(prompt, "prompt");
+        Consumer<String> validatedSubmitCommand = Objects.requireNonNull(submitCommand, "submitCommand");
+
+        try (TerminalCommandHandler commandHandler = createClientHandler()) {
+            String rawCommand;
+
+            while ((rawCommand = commandHandler.readCommand(validatedPrompt)) != null) {
+                String normalizedCommand = rawCommand.strip();
+
+                if (TerminalCommands.EXIT_COMMAND.equalsIgnoreCase(normalizedCommand)
+                    || TerminalCommands.ESCAPE_COMMAND.equalsIgnoreCase(normalizedCommand)) {
+                    return;
+                }
+
+                if (!normalizedCommand.isEmpty()) {
+                    validatedSubmitCommand.accept(rawCommand);
+                }
+            }
+        } catch (IOException exception) {
+            System.out.println("Client terminal closed: " + exception.getMessage());
+        }
     }
 
     public String readCommand(String prompt) {

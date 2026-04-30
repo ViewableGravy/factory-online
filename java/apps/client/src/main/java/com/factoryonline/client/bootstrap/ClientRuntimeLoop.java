@@ -77,7 +77,6 @@ public final class ClientRuntimeLoop {
 
             TickControl updatedTickControl = client.getTickControl();
             client.scheduleTicks(automaticTickDue && updatedTickControl.isAutomatic());
-            client.simulateCurrentTick();
             awaitEnd(updatedTickControl);
         }
     }

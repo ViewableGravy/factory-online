@@ -3,6 +3,12 @@
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_dir="$(cd -- "$script_dir/.." && pwd)"
+
+if [[ -z "${JAVA_HOME-}" && -x "$repo_dir/.jdk/jdk-26+35/Contents/Home/bin/java" ]]; then
+	export JAVA_HOME="$repo_dir/.jdk/jdk-26+35/Contents/Home"
+	export PATH="$JAVA_HOME/bin:$PATH"
+fi
 
 verbose=false
 
