@@ -12,6 +12,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoException;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import com.factoryonline.client.bootstrap.App;
 import com.factoryonline.foundation.ids.ClientId;
 import com.factoryonline.transport.ClientTransport;
 import com.factoryonline.transport.TransportMessage;
@@ -20,25 +21,28 @@ import com.factoryonline.transport.commands.ProtocolCommand;
 import com.factoryonline.transport.kryo.KryoStreams;
 
 public final class TcpClientTransport implements ClientTransport, AutoCloseable {
-    private final ClientId clientId;
+    private ClientId clientId;
     private final Socket socket;
     private final Kryo kryo;
     private final Input input;
     private final Output output;
-    private final Thread readerThread;
     private final AtomicInteger currentTick = new AtomicInteger();
     private final Object writeMonitor = new Object();
     private final List<ProtocolCommand> queuedCommands = new ArrayList<>();
     private final List<Runnable> messageListeners = new ArrayList<>();
 
     private volatile boolean closed;
+    private Thread readerThread;
 
-    public TcpClientTransport(String host, int port, ClientId clientId) throws IOException {
-        this.clientId = Objects.requireNonNull(clientId, "clientId");
+    public TcpClientTransport(String host, int port) throws IOException {
         this.socket = new Socket(requireNonBlank(host, "host"), requirePort(port));
         this.kryo = KryoStreams.createKryo();
         this.input = new Input(socket.getInputStream());
         this.output = new Output(socket.getOutputStream());
+    }
+
+    public synchronized void initialize(ClientId clientId) {
+        this.clientId = Objects.requireNonNull(clientId, "clientId");
         this.readerThread = new Thread(this::readLoop, "tcp-client-transport-reader-" + clientId.value);
         this.readerThread.setDaemon(true);
         this.readerThread.start();
@@ -46,13 +50,18 @@ public final class TcpClientTransport implements ClientTransport, AutoCloseable 
 
     @Override
     public ClientId getClientId() {
-        return clientId;
+        ClientId validatedClientId = clientId;
+        if (validatedClientId == null) {
+            return App.clientId;
+        }
+
+        return validatedClientId;
     }
 
     @Override
     public void send(TransportMessage message, boolean delayed) {
         Objects.requireNonNull(message, "message");
-        writeCommand(new ClientTransportCommand(clientId, message.payload));
+        writeCommand(new ClientTransportCommand(App.clientId, message.payload));
     }
 
     @Override
@@ -136,7 +145,7 @@ public final class TcpClientTransport implements ClientTransport, AutoCloseable 
     private void writeCommand(ProtocolCommand command) {
         synchronized (writeMonitor) {
             if (closed) {
-                throw new IllegalStateException("Transport is closed for client " + clientId.value);
+                throw new IllegalStateException("Transport is closed for client " + App.clientId.value);
             }
 
             try {

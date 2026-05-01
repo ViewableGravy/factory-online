@@ -31,15 +31,20 @@ public final class ClientApplication {
     // The long-term target is an extra client delay budget on top of observed network delay.
     // TCP tick sync does not currently carry enough clock information to measure that delay safely.
     // The manual harness still works in whole ticks, so the current value of 4 remains the local safety buffer.
+    private static final int CHECKSUM_HISTORY_WINDOW_TICKS = RuntimeTiming.CLIENT_TARGET_LOCAL_BUFFER_TICKS
+        + RuntimeTiming.CLIENT_HARD_CORRECTION_TICKS
+        + RuntimeTiming.SERVER_TICK_SYNC_INTERVAL
+        + RuntimeTiming.CLIENT_CATCH_UP_TICKS;
     private static final TerminalUiState TERMINAL_UI_STATE = TerminalUiState.getInstance();
 
-    private final ClientId clientId;
+    public final ClientId clientId;
     private final SimulationId requestedSimulationId;
-    private final ClientTransport transport;
+    private ClientTransport transport;
     private final ClientTickSynchronizer tickSynchronizer;
     private final SimulationRegistry simulationRegistry = new SimulationRegistry();
     private final Map<SimulationId, Map<Integer, SimulationAugmentation>> queuedActionsBySimulation = new HashMap<>();
     private final Map<SimulationId, Map<Integer, Integer>> queuedChecksumsBySimulation = new HashMap<>();
+    private final Map<SimulationId, Map<Integer, Integer>> recordedChecksumsBySimulation = new HashMap<>();
     private final Set<SimulationId> attachedSimulationIds = new HashSet<>();
     private final Ticker ticker = new Ticker();
     private BatchedSimulationRunner runner;
@@ -47,14 +52,15 @@ public final class ClientApplication {
     private boolean joinRequested;
     private SimulationId joinedSimulationId;
 
-    public ClientApplication(ClientId clientId, SimulationId requestedSimulationId, ClientTransport transport) {
+    public ClientApplication(ClientId clientId, SimulationId requestedSimulationId) {
         this.clientId = Objects.requireNonNull(clientId, "clientId");
         this.requestedSimulationId = Objects.requireNonNull(requestedSimulationId, "requestedSimulationId");
-        this.transport = Objects.requireNonNull(transport, "transport");
         this.tickSynchronizer = new ClientTickSynchronizer(clientId);
     }
 
-    public void setup() {
+    public void initialize(ClientTransport transport) {
+        this.transport = Objects.requireNonNull(transport, "transport");
+
         if (joinRequested) {
             return;
         }
@@ -179,6 +185,10 @@ public final class ClientApplication {
             return;
         }
 
+        Simulation simulation = simulationRegistry.get(activeSimulationId);
+        int localChecksum = simulation.checksum();
+        recordChecksum(activeSimulationId, protocolTick, localChecksum);
+
         Map<Integer, Integer> queuedChecksums = queuedChecksumsBySimulation.get(activeSimulationId);
         if (queuedChecksums == null) {
             return;
@@ -188,35 +198,31 @@ public final class ClientApplication {
         if (expectedChecksum == null) {
             return;
         }
-
-        Simulation simulation = simulationRegistry.get(activeSimulationId);
-        int localChecksum = simulation.checksum();
         if (localChecksum == expectedChecksum.intValue()) {
             return;
         }
 
-        System.out.println(
-            "Client " + TERMINAL_UI_STATE.formatClient(clientId)
-                + " checksum mismatch at tick " + protocolTick
-                + " on " + TERMINAL_UI_STATE.formatSimulation(activeSimulationId)
-                + " (local " + localChecksum + ", server " + expectedChecksum + ")");
+        logChecksumMismatch(activeSimulationId, protocolTick, localChecksum, expectedChecksum.intValue());
     }
 
     private void receiveInitialStates() {
-        for (InitialSimulationStateCommand initialState : transport.drainAs(InitialSimulationStateCommand.class)) {
+        ClientTransport validatedTransport = requireTransport();
+        for (InitialSimulationStateCommand initialState : validatedTransport.drainAs(InitialSimulationStateCommand.class)) {
             attachSimulation(initialState);
         }
     }
 
     private void receiveTickSyncMessages() {
-        for (TickSyncCommand tickSyncMessage : transport.drainAs(TickSyncCommand.class)) {
-            tickSynchronizer.receive(tickSyncMessage, transport.getCurrentTick());
+        ClientTransport validatedTransport = requireTransport();
+        for (TickSyncCommand tickSyncMessage : validatedTransport.drainAs(TickSyncCommand.class)) {
+            tickSynchronizer.receive(tickSyncMessage, validatedTransport.getCurrentTick());
             queueChecksum(tickSyncMessage);
         }
     }
 
     private void receiveAcknowledgements() {
-        for (AckCommand ackMessage : transport.drainAs(AckCommand.class)) {
+        ClientTransport validatedTransport = requireTransport();
+        for (AckCommand ackMessage : validatedTransport.drainAs(AckCommand.class)) {
             System.out.println(
                 "Client " + TERMINAL_UI_STATE.formatClient(clientId)
                     + " received Ack for " + TERMINAL_UI_STATE.formatSimulation(ackMessage.simulationId)
@@ -225,7 +231,8 @@ public final class ClientApplication {
     }
 
     private void receiveRejections() {
-        for (RejectionCommand rejectionMessage : transport.drainAs(RejectionCommand.class)) {
+        ClientTransport validatedTransport = requireTransport();
+        for (RejectionCommand rejectionMessage : validatedTransport.drainAs(RejectionCommand.class)) {
             System.out.println(
                 "Client " + TERMINAL_UI_STATE.formatClient(clientId)
                     + " received Rej for " + TERMINAL_UI_STATE.formatSimulation(rejectionMessage.simulationId)
@@ -234,7 +241,8 @@ public final class ClientApplication {
     }
 
     private synchronized void receiveSimulationUpdates() {
-        for (SimulationUpdateCommand simulationUpdate : transport.drainAs(SimulationUpdateCommand.class)) {
+        ClientTransport validatedTransport = requireTransport();
+        for (SimulationUpdateCommand simulationUpdate : validatedTransport.drainAs(SimulationUpdateCommand.class)) {
             queuedActionsBySimulation
                 .computeIfAbsent(simulationUpdate.simulationId, ignored -> new HashMap<>())
                 .put(simulationUpdate.tick, simulationUpdate.augmentation);
@@ -253,7 +261,7 @@ public final class ClientApplication {
         if (runner == null) {
             runner = new BatchedSimulationRunner(1, "client");
             ticker.queueInitialize(initialState.tick);
-            startupBufferTicks = Math.max(0, RuntimeTiming.CLIENT_TARGET_LOCAL_BUFFER_TICKS - 1);
+            startupBufferTicks = RuntimeTiming.CLIENT_TARGET_LOCAL_BUFFER_TICKS;
         }
 
         Simulation bufferedSimulation = new Simulation(initialState.simulationId, initialState.snapshot);
@@ -276,6 +284,20 @@ public final class ClientApplication {
         }
 
         if (currentSimulationTick() > tickSyncMessage.serverTick) {
+            Integer recordedChecksum = recordedChecksumsBySimulation
+                .getOrDefault(simulationId, Map.of())
+                .get(tickSyncMessage.serverTick);
+            if (recordedChecksum != null) {
+                if (recordedChecksum.intValue() != tickSyncMessage.serverChecksum) {
+                    logChecksumMismatch(
+                        simulationId,
+                        tickSyncMessage.serverTick,
+                        recordedChecksum.intValue(),
+                        tickSyncMessage.serverChecksum);
+                }
+                return;
+            }
+
             System.out.println(
                 "Client " + TERMINAL_UI_STATE.formatClient(clientId)
                     + " skipped late checksum for tick " + tickSyncMessage.serverTick
@@ -318,11 +340,37 @@ public final class ClientApplication {
         return toProtocolTick(ticker.getCurrentTick());
     }
 
+    private void recordChecksum(SimulationId simulationId, int tick, int checksum) {
+        Map<Integer, Integer> recordedChecksums = recordedChecksumsBySimulation
+            .computeIfAbsent(simulationId, ignored -> new HashMap<>());
+        recordedChecksums.put(tick, checksum);
+
+        int oldestTickToKeep = tick - CHECKSUM_HISTORY_WINDOW_TICKS;
+        recordedChecksums.entrySet().removeIf(entry -> entry.getKey().intValue() < oldestTickToKeep);
+    }
+
+    private void logChecksumMismatch(SimulationId simulationId, int tick, int localChecksum, int expectedChecksum) {
+        System.out.println(
+            "Client " + TERMINAL_UI_STATE.formatClient(clientId)
+                + " checksum mismatch at tick " + tick
+                + " on " + TERMINAL_UI_STATE.formatSimulation(simulationId)
+                + " (local " + localChecksum + ", server " + expectedChecksum + ")");
+    }
+
     private int toProtocolTick(long tick) {
         if (tick > Integer.MAX_VALUE) {
             throw new IllegalStateException("tick exceeds protocol range: " + tick);
         }
 
         return (int) tick;
+    }
+
+    private ClientTransport requireTransport() {
+        ClientTransport validatedTransport = transport;
+        if (validatedTransport == null) {
+            throw new IllegalStateException("app transport has not been initialized");
+        }
+
+        return validatedTransport;
     }
 }

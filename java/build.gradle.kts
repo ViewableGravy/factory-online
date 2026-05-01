@@ -56,6 +56,10 @@ tasks.withType<JavaCompile>().configureEach {
     options.release.set(11)
 }
 
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    failOnNoDiscoveredTests = false
+}
+
 fun configureRuntimeTask(task: JavaExec, runtimeMainClass: String) {
     task.group = ApplicationPlugin.APPLICATION_GROUP
     task.classpath = sourceSets["main"].runtimeClasspath
@@ -89,6 +93,15 @@ tasks.register("tickerSchedulerTest", JavaExec::class.java) {
     mainClass.set("com.factoryonline.simulation.tick.TickerSchedulerTest")
 }
 
+tasks.register("clientStartupBufferTest", JavaExec::class.java) {
+    group = "verification"
+    description = "Runs the plain Java client startup buffer regression test."
+    dependsOn("testClasses")
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("com.factoryonline.client.bootstrap.ClientStartupBufferTest")
+}
+
 tasks.named("check") {
     dependsOn("tickerSchedulerTest")
+    dependsOn("clientStartupBufferTest")
 }

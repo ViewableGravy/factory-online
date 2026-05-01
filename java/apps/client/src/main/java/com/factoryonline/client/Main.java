@@ -1,14 +1,12 @@
 package com.factoryonline.client;
 
 import java.io.IOException;
-import java.util.UUID;
 
+import com.factoryonline.client.bootstrap.App;
 import com.factoryonline.client.bootstrap.ClientApplication;
 import com.factoryonline.client.bootstrap.ClientRuntimeLoop;
 import com.factoryonline.foundation.config.NetworkConfig;
 import com.factoryonline.foundation.config.TerminalCommands;
-import com.factoryonline.foundation.ids.ClientId;
-import com.factoryonline.foundation.ids.SimulationIds;
 import com.factoryonline.foundation.scheduler.LoopCadence;
 import com.factoryonline.foundation.terminal.TerminalCommandHandler;
 import com.factoryonline.server.bootstrap.TerminalUiState;
@@ -16,38 +14,42 @@ import com.factoryonline.simulation.tick.Scheduler;
 import com.factoryonline.transport.tcp.TcpClientTransport;
 
 public final class Main {
-    public static final ClientId clientId = new ClientId("client-" + UUID.randomUUID().toString().substring(0, 8));
-
     public static void main(String[] args) throws IOException {
         LoopCadence.initialize();
 
+        /***** INSTANTIATE *****/
         TcpClientTransport transport = new TcpClientTransport(
             NetworkConfig.DEFAULT_HOST,
-            NetworkConfig.DEFAULT_PORT,
-            clientId
+            NetworkConfig.DEFAULT_PORT
         );
 
-        ClientApplication client = new ClientApplication(clientId, SimulationIds.RANDOM, transport);
-        ClientRuntimeLoop runtimeLoop = new ClientRuntimeLoop(client, transport);
+        ClientApplication app = App.singleton();
+        ClientRuntimeLoop runtimeLoop = new ClientRuntimeLoop(app, transport);
 
-        Scheduler.register(client::applyQueuedActions);
-        Scheduler.register(client::runAttachedSimulations);
-        Scheduler.register(client::compareQueuedChecksum);
+        /***** INITIALIZE *****/
+        Scheduler.register(app::applyQueuedActions);
+        Scheduler.register(app::runAttachedSimulations);
+        Scheduler.register(app::compareQueuedChecksum);
 
-        client.setup();
+        // initialize the app after the singleton is available
+        app.initialize(transport);
+        transport.initialize(App.clientId);
+
+        /***** START *****/
         runtimeLoop.start();
 
         printConnectedMessage();
 
         TerminalCommandHandler.awaitClientCommands(prompt(), runtimeLoop::submitInput);
         
+        /***** CLEANUP *****/
         runtimeLoop.stop();
-        client.cleanup();
+        app.cleanup();
     }
 
     private static String prompt() {
         return "Client ["
-            + TerminalUiState.getInstance().formatClient(clientId)
+            + TerminalUiState.getInstance().formatClient(App.singleton().clientId)
             + "] "
             + TerminalCommands.SNAPSHOT_COMMAND
             + ", "
@@ -61,6 +63,6 @@ public final class Main {
 
     private static void printConnectedMessage() {
         System.out.println(
-            "Client " + TerminalUiState.getInstance().formatClient(clientId) + " connected");
+            "Client " + TerminalUiState.getInstance().formatClient(App.singleton().clientId) + " connected");
     }
 }

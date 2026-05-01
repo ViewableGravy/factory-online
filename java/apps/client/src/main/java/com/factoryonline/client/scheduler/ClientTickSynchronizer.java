@@ -60,6 +60,13 @@ public final class ClientTickSynchronizer {
             return Math.max(0, tickSyncState.serverTick - localTick);
         }
 
+        // Incoming transport messages can wake the client loop between cadence ticks.
+        // Keep those wakeups read-only so lag correction uses the extrapolated server time,
+        // not the raw just-received tick snapshot.
+        if (!automaticTickDue) {
+            return 0;
+        }
+
         int estimatedServerTick = tickSyncState.estimateCurrentServerTick(currentTransportTick);
         int targetLagTicks = RuntimeTiming.CLIENT_TARGET_LOCAL_BUFFER_TICKS;
         int currentLagTicks = estimatedServerTick - localTick;

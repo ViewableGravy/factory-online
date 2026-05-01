@@ -16,6 +16,17 @@
 ## Behavior
 - IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning
 - Use `Context7` Tool for documentation retrieval
+- ALWAYS use a GPT-5-mini subagent for running commands whose main purpose is log capture, log watching, or log retrieval.
+- The main agent should not read broad raw runtime logs directly when a GPT-5-mini subagent can run the command, watch the output, and return a summary.
+
+## Log capture workflow
+
+- For runtime verification or debugging that depends on logs, launch a GPT-5-mini subagent first.
+- Have the subagent run the command with a bounded timeout so long-running processes do not consume the main agent turn.
+- Have the subagent narrow output aggressively with `grep`, `rg`, `awk`, or similar filters before returning anything.
+- Have the subagent redirect filtered output into a temp file when the command can still emit many lines.
+- Have the subagent report back only the relevant lines, counts, paths, and concise conclusions.
+- Only pull raw log files into the main agent context when filtered summaries are insufficient to decide the next edit.
 
 ## Workspace map
 

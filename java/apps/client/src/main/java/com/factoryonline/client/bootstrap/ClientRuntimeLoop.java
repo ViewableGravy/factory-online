@@ -67,15 +67,16 @@ public final class ClientRuntimeLoop {
         while (running.get()) {
             TickControl tickControl = client.getTickControl();
             boolean automaticTickDue = LoopCadence.beginCycle(tickControl);
-            if (automaticTickDue && tickControl.isAutomatic()) {
-                transport.advanceTick();
-            }
 
             drainInputs();
             executeQueuedCommands();
             client.processIncomingMessages();
 
             TickControl updatedTickControl = client.getTickControl();
+            if (automaticTickDue && updatedTickControl.isAutomatic()) {
+                transport.advanceTick();
+            }
+
             client.scheduleTicks(automaticTickDue && updatedTickControl.isAutomatic());
             awaitEnd(updatedTickControl);
         }
