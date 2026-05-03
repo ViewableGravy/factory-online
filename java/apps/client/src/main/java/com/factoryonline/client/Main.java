@@ -55,15 +55,15 @@ public final class Main {
     }
 
     private static void authenticate(TcpClientTransport transport) throws IOException {
-        String username;
         String password;
 
-        try (TerminalCommandHandler loginHandler = TerminalCommandHandler.createClientHandler()) {
-            username = loginHandler.readCommand("Username: ");
+        try (TerminalCommandHandler loginHandler = TerminalCommandHandler.createClientLoginHandler()) {
+            App.username = loginHandler.readCommand("Username: ");
             password = loginHandler.readCommand("Password: ");
         }
 
-        transport.send(new AuthRequestCommand(username, password), false);
+
+        transport.send(new AuthRequestCommand(App.username, password), false);
 
         while (true) {
             for (AuthSuccessCommand authSuccess : transport.drainAs(AuthSuccessCommand.class)) {

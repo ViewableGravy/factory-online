@@ -8,8 +8,23 @@ set -euo pipefail
 manifest="${1:-.github/hooks/runtime-investigator.created}"
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
+cleanup_runtime_logs() {
+  for target in "$repo_root"/runtime-logs/run-*; do
+    [ -e "$target" ] || continue
+
+    rel="${target#$repo_root/}"
+    if git ls-files --error-unmatch "$rel" >/dev/null 2>&1; then
+      echo "Skipping tracked path: $rel"
+      continue
+    fi
+
+    rm -rf "$target" && echo "Removed investigator artifact: $rel"
+  done
+}
+
 if [ ! -f "$manifest" ]; then
   echo "Manifest not found: $manifest"
+  cleanup_runtime_logs
   exit 0
 fi
 
@@ -39,6 +54,8 @@ while IFS= read -r rel || [ -n "$rel" ]; do
 
   rm -rf "$target" && echo "Removed: $rel"
 done < "$manifest"
+
+cleanup_runtime_logs
 
 # Remove manifest after cleanup
 rm -f "$manifest"

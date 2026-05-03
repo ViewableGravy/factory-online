@@ -21,6 +21,9 @@ Your single job is to run the Java server/client scripts with strict bounds, ext
 ## Execution Protocol
 1. Confirm the requested timeout. Default to 45 seconds if none is provided.
 2. From repository root, prepare a temp output folder for this run.
+	- Prefer an OS temp directory outside the repository, such as one created with `mktemp -d`.
+	- Do not write captured logs under `runtime-logs/` unless the user explicitly asks to preserve repo-local artifacts.
+	- If you must create any repo-local artifact, append each repo-relative path to `.github/hooks/runtime-investigator.created` so the cleanup hook can remove it.
 3. Start server first with timeout and pseudo-tty capture to a file.
 4. If server shows startup failure signals, stop and summarize immediately.
 5. Start client with timeout and capture to a separate file.
@@ -38,6 +41,9 @@ Use file-aware line extraction (`rg -nH`) and include only the minimum lines nee
 
 ## Pre Output
 Once the investigation is complete, before returning, ensure that all temporary files have been removed, and that terminal instances are shutdown. If any cleanup step fails, include that in the final summary.
+
+- If you created repo-local files, remove them before returning and leave the manifest in place for the hook as a fallback.
+- If cleanup succeeds fully, remove the manifest as the last cleanup step.
 
 ## Output Format
 Return exactly these sections:

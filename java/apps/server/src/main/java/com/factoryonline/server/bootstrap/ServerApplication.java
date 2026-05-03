@@ -209,7 +209,6 @@ public final class ServerApplication {
 
         Session session = new Session(clientId, simulationId);
         sessionsByClientId.put(clientId, session);
-
         broadcaster.subscribe(simulationId, clientId);
         int snapshotTick = currentSnapshotTick();
         transport.send(clientId, new InitialSimulationStateCommand(simulationId, simulation.snapshot(), snapshotTick));

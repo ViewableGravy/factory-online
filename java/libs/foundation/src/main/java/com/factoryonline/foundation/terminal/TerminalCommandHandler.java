@@ -41,6 +41,10 @@ public final class TerminalCommandHandler implements Closeable {
         return new TerminalCommandHandler(createClientCompleter(), true);
     }
 
+    public static TerminalCommandHandler createClientLoginHandler() throws IOException {
+        return new TerminalCommandHandler(createClientCompleter(), false);
+    }
+
     public static TerminalCommandHandler createServerHandler() throws IOException {
         return new TerminalCommandHandler(createServerCompleter(), false);
     }
