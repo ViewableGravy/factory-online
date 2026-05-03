@@ -1,0 +1,8 @@
+{
+  "name": "cleanup-runtime-investigator",
+  "description": "Removes files listed in .github/hooks/runtime-investigator.created after the runtime-behavior-investigator subagent finishes. Only removes untracked repo-relative paths to avoid accidental deletions.",
+  "trigger": "SubagentFinished:runtime-behavior-investigator",
+  "script": ".github/hooks/cleanup-runtime-investigator.sh",
+  "manifest": ".github/hooks/runtime-investigator.created",
+  "safety": "Skips files outside the repository root and files tracked by git. Manifest entries must be repo-relative paths."
+}
