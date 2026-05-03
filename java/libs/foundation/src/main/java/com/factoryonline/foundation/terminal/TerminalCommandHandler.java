@@ -69,6 +69,29 @@ public final class TerminalCommandHandler implements Closeable {
         }
     }
 
+    public static void awaitServerCommands(String prompt, Consumer<String> submitCommand) {
+        String validatedPrompt = Objects.requireNonNull(prompt, "prompt");
+        Consumer<String> validatedSubmitCommand = Objects.requireNonNull(submitCommand, "submitCommand");
+
+        try (TerminalCommandHandler commandHandler = createServerHandler()) {
+            String rawCommand;
+
+            while ((rawCommand = commandHandler.readCommand(validatedPrompt)) != null) {
+                String normalizedCommand = rawCommand.strip();
+
+                if (TerminalCommands.EXIT_COMMAND.equalsIgnoreCase(normalizedCommand)
+                    || TerminalCommands.ESCAPE_COMMAND.equalsIgnoreCase(normalizedCommand)) {
+                    return;
+                }
+
+                if (!normalizedCommand.isEmpty()) {
+                    validatedSubmitCommand.accept(rawCommand);
+                }
+            }
+        } catch (IOException exception) {
+            System.out.println("Server terminal closed: " + exception.getMessage());
+        }
+    }
     public String readCommand(String prompt) {
         try {
             return lineReader.readLine(prompt);

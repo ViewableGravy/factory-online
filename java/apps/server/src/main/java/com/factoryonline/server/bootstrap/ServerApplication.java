@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 import com.factoryonline.foundation.config.RuntimeTiming;
@@ -20,6 +21,8 @@ import com.factoryonline.simulation.SimulationRegistry;
 import com.factoryonline.simulation.tick.Ticker;
 import com.factoryonline.transport.ServerTransport;
 import com.factoryonline.transport.commands.AckCommand;
+import com.factoryonline.transport.commands.AuthRequestCommand;
+import com.factoryonline.transport.commands.AuthSuccessCommand;
 import com.factoryonline.transport.commands.ClientTransportCommand;
 import com.factoryonline.transport.commands.InitialSimulationStateCommand;
 import com.factoryonline.transport.commands.JoinSimulationCommand;
@@ -38,7 +41,9 @@ public final class ServerApplication {
     private final SimulationRegistry registry;
     private final Broadcaster broadcaster;
     private final SimulationIdFactory simulationIdFactory;
+    private final Map<ClientId, String> authTokensByClientId = new HashMap<>();
     private final Map<ClientId, Session> sessionsByClientId = new HashMap<>();
+    private final Map<ClientId, String> usernamesByClientId = new HashMap<>();
     private final Map<Integer, List<BufferedSimulationInput>> bufferedInputsByTick = new HashMap<>();
     private final Map<Integer, Map<SimulationId, Simulation>> validationSimulationsByTick = new HashMap<>();
 
@@ -142,6 +147,16 @@ public final class ServerApplication {
         ClientTransportCommand validatedMessage = Objects.requireNonNull(clientMessage, "clientMessage");
         ProtocolCommand payload = validatedMessage.payload;
 
+        if (payload instanceof AuthRequestCommand) {
+            handleAuthRequest(validatedMessage.clientId, (AuthRequestCommand) payload);
+            return;
+        }
+
+        if (!isAuthenticated(validatedMessage)) {
+            reject(validatedMessage.clientId, simulationIdFor(payload), "unauthenticated: missing or invalid token");
+            return;
+        }
+
         if (payload instanceof JoinSimulationCommand) {
             handleJoinRequest(validatedMessage.clientId, (JoinSimulationCommand) payload);
             return;
@@ -156,8 +171,29 @@ public final class ServerApplication {
 
         System.out.println(
             TERMINAL_UI_STATE.formatServerLabel()
-                + " ignored unknown payload from " + TERMINAL_UI_STATE.formatClient(validatedMessage.clientId)
+                + " ignored unknown payload from " + usernameFor(validatedMessage.clientId)
                 + ": " + payload.getClass().getName());
+    }
+
+    private void handleAuthRequest(ClientId clientId, AuthRequestCommand request) {
+        ClientId validatedClientId = Objects.requireNonNull(clientId, "clientId");
+        String username = Objects.requireNonNull(request.username, "username");
+        String token = UUID.randomUUID().toString();
+        authTokensByClientId.put(validatedClientId, token);
+        usernamesByClientId.put(validatedClientId, username);
+        transport.send(validatedClientId, new AuthSuccessCommand(token));
+        System.out.println(
+            TERMINAL_UI_STATE.formatServerLabel()
+                + " authenticated " + usernameFor(validatedClientId));
+    }
+
+    private String usernameFor(ClientId clientId) {
+        String name = usernamesByClientId.get(clientId);
+        if (name != null) {
+            return name;
+        }
+
+        return TERMINAL_UI_STATE.formatClient(clientId);
     }
 
     private void handleJoinRequest(ClientId clientId, JoinSimulationCommand joinRequest) {
@@ -187,7 +223,7 @@ public final class ServerApplication {
         transport.send(clientId, new AckCommand(simulationId, currentTick(), "join accepted"));
 
         System.out.println(
-            TERMINAL_UI_STATE.formatServerLabel() + " accepted join from " + TERMINAL_UI_STATE.formatClient(clientId)
+            TERMINAL_UI_STATE.formatServerLabel() + " accepted join from " + usernameFor(clientId)
                 + " for " + TERMINAL_UI_STATE.formatSimulation(simulationId)
                 + " at current server tick " + currentTick());
     }
@@ -217,7 +253,7 @@ public final class ServerApplication {
         transport.send(clientId, new AckCommand(inputRequest.simulationId, targetTick, "input accepted"));
         broadcaster.broadcast(inputRequest.simulationId, targetTick, inputRequest.augmentation);
         System.out.println(
-            TERMINAL_UI_STATE.formatServerLabel() + " accepted input from " + TERMINAL_UI_STATE.formatClient(clientId)
+            TERMINAL_UI_STATE.formatServerLabel() + " accepted input from " + usernameFor(clientId)
                 + " for tick " + targetTick
                 + " on " + TERMINAL_UI_STATE.formatSimulation(session.simulationId));
     }
@@ -269,8 +305,25 @@ public final class ServerApplication {
     private void reject(ClientId clientId, SimulationId simulationId, String message) {
         transport.send(clientId, new RejectionCommand(simulationId, currentTick(), message));
         System.out.println(
-            TERMINAL_UI_STATE.formatServerLabel() + " rejected " + TERMINAL_UI_STATE.formatClient(clientId)
+            TERMINAL_UI_STATE.formatServerLabel() + " rejected " + usernameFor(clientId)
                 + ": " + message);
+    }
+
+    private boolean isAuthenticated(ClientTransportCommand clientMessage) {
+        String expectedToken = authTokensByClientId.get(clientMessage.clientId);
+        return expectedToken != null && expectedToken.equals(clientMessage.sessionToken);
+    }
+
+    private SimulationId simulationIdFor(ProtocolCommand payload) {
+        if (payload instanceof JoinSimulationCommand) {
+            return ((JoinSimulationCommand) payload).simulationId;
+        }
+
+        if (payload instanceof SimulationInputCommand) {
+            return ((SimulationInputCommand) payload).simulationId;
+        }
+
+        return SimulationIds.RANDOM;
     }
 
     private Session findAnySession() {

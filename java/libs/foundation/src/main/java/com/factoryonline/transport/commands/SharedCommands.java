@@ -14,6 +14,8 @@ public final class SharedCommands {
         Kryo validatedKryo = requireKryo(kryo);
         validatedKryo.register(ProtocolCommand.class);
         validatedKryo.register(ClientTransportCommand.class);
+        validatedKryo.register(AuthRequestCommand.class);
+        validatedKryo.register(AuthSuccessCommand.class);
         validatedKryo.register(JoinSimulationCommand.class);
         validatedKryo.register(SimulationInputCommand.class);
         validatedKryo.register(InitialSimulationStateCommand.class);

@@ -19,11 +19,16 @@
 - ALWAYS use a GPT-5-mini subagent for running commands whose main purpose is log capture, log watching, or log retrieval.
 - The main agent should not read broad raw runtime logs directly when a GPT-5-mini subagent can run the command, watch the output, and return a summary.
 
-## Runtime Log Delegation
+## Application Runtime & Logging
 
-- For any runtime-related logging, live-process execution, or behavior checks, default to delegating the work to the repository subagent `runtime-behavior-investigator` (file: .github/agents/runtime-behavior-investigator.agent.md).
-- The main agent MUST NOT run long-lived server or client scripts directly; the `runtime-behavior-investigator` enforces bounded execution, captures artifacts, and returns a concise filtered summary.
-- The runtime subagent focuses on three signal groups: errors/failures, session/startup/connect events, and tick/timing simulation progress. Only those filtered summaries should be surfaced to the main agent unless deep-dive raw logs are explicitly requested.
+A Subagent is provided for the explicit purpose of handling runtime behavior investigations, interactions, execution and log capture. This subagent, `runtime-behavior-investigator`, is designed to tackle the following tasks
+1. Running of the server/client application through the use of `java/run-server.sh` and `java/run-client.sh` scripts
+2. Capturing and filtering of runtime logs for errors/failures, session/startup/connect
+3. Interacting with the runtime environment to simulate ticks, timing, and other behavior checks
+
+In the event that the output, or behavior of the sub-agent does not align with the expectationsm, the main agent should assess the summary provided by the subagent, and if necessary, modify the `.github/agents/runtime-behavior-investigator.agent.md` file to include any additional information that the subagent may need to better perform it's task.
+
+IMPORTANT: NEVER run `.run-server.sh` or `.run-client.sh` directly from the main agent. ALWAYS use the `runtime-behavior-investigator` subagent for any interactions with the runtime environment, including log capture and behavior investigations.
 
 ## Workspace map
 

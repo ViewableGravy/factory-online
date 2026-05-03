@@ -36,6 +36,9 @@ Prioritize these groups in order:
 
 Use file-aware line extraction (`rg -nH`) and include only the minimum lines needed to explain behavior.
 
+## Pre Output
+Once the investigation is complete, before returning, ensure that all temporary files have been removed, and that terminal instances are shutdown. If any cleanup step fails, include that in the final summary.
+
 ## Output Format
 Return exactly these sections:
 1. `Outcome`: pass/fail plus one-sentence behavior conclusion.
@@ -43,3 +46,6 @@ Return exactly these sections:
 3. `Signals`: grouped findings for errors, session/startup, and tick/timing.
 4. `Artifacts`: paths to captured server/client logs.
 5. `Next Checks`: up to three targeted follow-up checks.
+
+## Extra Notes
+If you encounter issues working with the scripts, then the `.github/agents/runtime-behavior-investigator.agent.md` file should be updated to include additional information that will assist in the future with the same workload, providing instructions, constraints, or execution details that will help the subagent better perform its task the next time. This should only be modified with a solution to a problem, once the subagent has identified a solution, rather than as a speculative measure.

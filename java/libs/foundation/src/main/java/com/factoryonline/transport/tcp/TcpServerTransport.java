@@ -92,6 +92,14 @@ public final class TcpServerTransport implements ServerTransport, AutoCloseable 
         }
     }
 
+    public void closeNoThrow() {
+        try {
+            close();
+        } catch (IOException exception) {
+            System.err.println("Failed to close TcpServerTransport: " + exception.getMessage());
+        }
+    }
+
     @SuppressWarnings("resource")
     private void acceptLoop() {
         while (!closed) {

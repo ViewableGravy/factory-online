@@ -64,6 +64,12 @@ public final class ClientApplication {
         if (joinRequested) {
             return;
         }
+    }
+
+    public synchronized void onAuthenticated() {
+        if (joinRequested) {
+            return;
+        }
 
         transport.send(new JoinSimulationCommand(requestedSimulationId), false);
         joinRequested = true;

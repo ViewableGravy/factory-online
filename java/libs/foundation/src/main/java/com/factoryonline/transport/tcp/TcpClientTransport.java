@@ -43,9 +43,12 @@ public final class TcpClientTransport implements ClientTransport, AutoCloseable 
 
     public synchronized void initialize(ClientId clientId) {
         this.clientId = Objects.requireNonNull(clientId, "clientId");
+    }
+
+    public void start() {
         this.readerThread = new Thread(this::readLoop, "tcp-client-transport-reader-" + clientId.value);
         this.readerThread.setDaemon(true);
-        this.readerThread.start();
+        readerThread.start();
     }
 
     @Override
@@ -61,7 +64,7 @@ public final class TcpClientTransport implements ClientTransport, AutoCloseable 
     @Override
     public void send(TransportMessage message, boolean delayed) {
         Objects.requireNonNull(message, "message");
-        writeCommand(new ClientTransportCommand(App.clientId, message.payload));
+        writeCommand(new ClientTransportCommand(App.clientId, message.payload, App.sessionToken));
     }
 
     @Override

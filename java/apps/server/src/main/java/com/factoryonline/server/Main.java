@@ -24,62 +24,45 @@ public final class Main {
     public static void main(String[] args) throws IOException {
         LoopCadence.initialize();
 
-        ServerApplication server = null;
-        ServerRuntimeLoop loop = null;
+        /***** INSTANTIATE *****/
+        TcpServerTransport transport = new TcpServerTransport(NetworkConfig.DEFAULT_PORT);
+        Ticker ticker = new Ticker();
+        ServerTickController tickController = new ServerTickController(TickControl.automatic(RuntimeTiming.TICK_INTERVAL_MILLIS));
+        SimulationRegistry registry = new SimulationRegistry();
+        BatchedSimulationRunner runner = new BatchedSimulationRunner(2, "server");
+        Broadcaster broadcaster = new Broadcaster(transport);
+        SimulationIdFactory simulationIdFactory = new SimulationIdFactory();
 
-        try (TcpServerTransport transport = new TcpServerTransport(NetworkConfig.DEFAULT_PORT)) {
-            Ticker ticker = new Ticker();
-            ServerTickController tickController = new ServerTickController(TickControl.automatic(RuntimeTiming.TICK_INTERVAL_MILLIS));
-            SimulationRegistry registry = new SimulationRegistry();
-            BatchedSimulationRunner runner = new BatchedSimulationRunner(2, "server");
-            Broadcaster broadcaster = new Broadcaster(transport);
-            SimulationIdFactory simulationIdFactory = new SimulationIdFactory();
-            TerminalCommandHandler commandHandler = TerminalCommandHandler.createServerHandler();
+        /***** INITIALIZE *****/
+        ServerApplication server = ServerApplication.builder()
+            .transport(transport)
+            .ticker(ticker)
+            .tickController(tickController)
+            .registry(registry)
+            .runner(runner)
+            .broadcaster(broadcaster)
+            .simulationIdFactory(simulationIdFactory)
+            .build()
+            .configureDefault();
 
-            server = ServerApplication.builder()
-                .transport(transport)
-                .ticker(ticker)
-                .tickController(tickController)
-                .registry(registry)
-                .runner(runner)
-                .broadcaster(broadcaster)
-                .simulationIdFactory(simulationIdFactory)
-                .build()
-                .configureDefault();
+        ServerRuntimeLoop loop = new ServerRuntimeLoop(server, tickController, transport);
 
-            Scheduler.register(server::applyBufferedInputs);
-            Scheduler.register(runner::runTick);
-            Scheduler.register(server::broadcastCurrentTickStateIfDue);
+        Scheduler.register(server::applyBufferedInputs);
+        Scheduler.register(runner::runTick);
+        Scheduler.register(server::broadcastCurrentTickStateIfDue);
 
-            loop = new ServerRuntimeLoop(server, tickController, transport);
+        /***** START *****/
+        loop.start();
 
-            loop.start();
+        System.out.println(
+            TerminalUiState.getInstance().formatServerLabel() + " listening on port " + NetworkConfig.DEFAULT_PORT);
 
-            System.out.println(
-                TerminalUiState.getInstance().formatServerLabel() + " listening on port " + NetworkConfig.DEFAULT_PORT);
+        TerminalCommandHandler.awaitServerCommands(prompt(), loop::submitCommand);
 
-            String rawCommand;
-
-            while ((rawCommand = commandHandler.readCommand(prompt())) != null) {
-                String normalizedCommand = rawCommand.strip();
-
-                if (TerminalCommands.EXIT_COMMAND.equalsIgnoreCase(normalizedCommand)) {
-                    break;
-                }
-
-                if (!normalizedCommand.isEmpty()) {
-                    loop.submitCommand(rawCommand);
-                }
-            }
-        } finally {
-            if (loop != null) {
-                loop.stop();
-            }
-
-            if (server != null) {
-                server.cleanup();
-            }
-        }
+        /***** CLEANUP *****/
+        loop.stop();
+        server.cleanup();
+        transport.closeNoThrow();
     }
 
     private static String prompt() {
