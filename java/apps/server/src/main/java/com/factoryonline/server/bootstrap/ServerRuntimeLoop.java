@@ -16,7 +16,6 @@ import com.factoryonline.transport.ServerTransport;
 
 public final class ServerRuntimeLoop {
     private final ServerApplication server;
-    private final ServerTickController tickController;
     private final Queue<String> queuedInputs = new ConcurrentLinkedQueue<>();
     private final Queue<ServerTerminalCommand> queuedCommands = new ConcurrentLinkedQueue<>();
     private final Object wakeMonitor = new Object();
@@ -24,9 +23,8 @@ public final class ServerRuntimeLoop {
     private long wakeVersion;
     private Thread loopThread;
 
-    public ServerRuntimeLoop(ServerApplication server, ServerTickController tickController, ServerTransport transport) {
+    public ServerRuntimeLoop(ServerApplication server, ServerTransport transport) {
         this.server = Objects.requireNonNull(server, "server");
-        this.tickController = Objects.requireNonNull(tickController, "tickController");
         Objects.requireNonNull(transport, "transport").addMessageListener(this::signalWorkAvailable);
     }
 
@@ -65,6 +63,7 @@ public final class ServerRuntimeLoop {
 
     private void runLoop() {
         while (running.get()) {
+            ServerTickController tickController = server.getTickController();
             TickControl tickControl = tickController.getTickControl();
             boolean automaticTickDue = LoopCadence.beginCycle(tickControl);
 
@@ -128,7 +127,7 @@ public final class ServerRuntimeLoop {
     private void drainCommands() {
         ServerTerminalCommand command;
         while ((command = queuedCommands.poll()) != null) {
-            ServerTerminalCommandExecutor.execute(command, server, tickController);
+            ServerTerminalCommandExecutor.execute(command, server, server.getTickController());
         }
     }
 
@@ -144,7 +143,8 @@ public final class ServerRuntimeLoop {
             }
 
             ServerTerminalCommand command = parseResult.command;
-            ServerTerminalCommandValidator.Result validationResult = ServerTerminalCommandValidator.validate(command, server, tickController);
+            ServerTerminalCommandValidator.Result validationResult =
+                ServerTerminalCommandValidator.validate(command, server, server.getTickController());
             if (!validationResult.valid) {
                 System.out.println(validationResult.message);
                 continue;

@@ -19,6 +19,11 @@
 - ALWAYS use a GPT-5-mini subagent for running commands whose main purpose is log capture, log watching, or log retrieval.
 - The main agent should not read broad raw runtime logs directly when a GPT-5-mini subagent can run the command, watch the output, and return a summary.
 
+## Subagent usage
+- Always use a `GPT-5 mini` subagent for investigation and research, avoiding reading any files until it is clear that the file is relevant based on the task
+- Always use a `GPT-5 mini` subagent for inserting code, especially when the code is non-trivial and requires a large diff. Ideally you provide the EXACT code that should be entered, but have the sub-agent enter it, rather than generating a diff yourself
+- Always use a `GPT-5 mini` subagent for running commands whose main purpose is log capture, log watching, or log retrieval. Custom Agents exist for some explicit tasks, but even for non-specific tasks, a generic sub-agent with the `execute`, `read`, and `search` tools can be used to run commands, watch output, and return summaries.
+
 ## Application Runtime & Logging
 
 A Subagent is provided for the explicit purpose of handling runtime behavior investigations, interactions, execution and log capture. This subagent, `runtime-behavior-investigator`, is designed to tackle the following tasks

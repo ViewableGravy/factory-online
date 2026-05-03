@@ -48,27 +48,13 @@ public final class ServerApplication {
     private final Map<Integer, Map<SimulationId, Simulation>> validationSimulationsByTick = new HashMap<>();
 
     public ServerApplication(ServerTransport transport) {
-        this(builder()
-            .transport(transport)
-            .tickController(ServerTickController.automatic())
-            .runner(new BatchedSimulationRunner(2, "server"))
-            .registry(new SimulationRegistry())
-            .broadcaster(new Broadcaster(transport))
-            .simulationIdFactory(new SimulationIdFactory()));
-    }
-
-    private ServerApplication(Builder builder) {
-        this.transport = Objects.requireNonNull(builder.transport, "transport");
-        this.ticker = Objects.requireNonNull(builder.ticker, "ticker");
-        this.tickController = Objects.requireNonNull(builder.tickController, "tickController");
-        this.runner = Objects.requireNonNull(builder.runner, "runner");
-        this.registry = Objects.requireNonNull(builder.registry, "registry");
-        this.broadcaster = Objects.requireNonNull(builder.broadcaster, "broadcaster");
-        this.simulationIdFactory = Objects.requireNonNull(builder.simulationIdFactory, "simulationIdFactory");
-    }
-
-    public static Builder builder() {
-        return new Builder();
+        this.transport = Objects.requireNonNull(transport, "transport");
+        this.ticker = new Ticker();
+        this.tickController = ServerTickController.automatic();
+        this.runner = new BatchedSimulationRunner(2, "server");
+        this.registry = new SimulationRegistry();
+        this.broadcaster = new Broadcaster(this.transport);
+        this.simulationIdFactory = new SimulationIdFactory();
     }
 
     public ServerApplication configureDefault() {
@@ -88,8 +74,12 @@ public final class ServerApplication {
         ticker.tick();
     }
 
-    private synchronized TickControl getTickControl() {
+    public synchronized TickControl getTickControl() {
         return tickController.getTickControl();
+    }
+
+    public ServerTickController getTickController() {
+        return tickController;
     }
 
     public void cleanup() {
@@ -102,6 +92,10 @@ public final class ServerApplication {
 
     public void requestSnapshot() {
         runner.requestSnapshot();
+    }
+
+    public void runRegisteredSimulations(long tick) {
+        runner.runTick(tick);
     }
 
     public SimulationId addSimulation() {
@@ -399,79 +393,6 @@ public final class ServerApplication {
         private BufferedSimulationInput(Session session, SimulationAugmentation augmentation) {
             this.session = Objects.requireNonNull(session, "session");
             this.augmentation = Objects.requireNonNull(augmentation, "augmentation");
-        }
-    }
-
-    public static final class Builder {
-        private ServerTransport transport;
-        private Ticker ticker;
-        private ServerTickController tickController;
-        private BatchedSimulationRunner runner;
-        private SimulationRegistry registry;
-        private Broadcaster broadcaster;
-        private SimulationIdFactory simulationIdFactory;
-
-        public Builder transport(ServerTransport transport) {
-            this.transport = Objects.requireNonNull(transport, "transport");
-            return this;
-        }
-
-        public Builder ticker(Ticker ticker) {
-            this.ticker = Objects.requireNonNull(ticker, "ticker");
-            return this;
-        }
-
-        public Builder tickController(ServerTickController tickController) {
-            this.tickController = Objects.requireNonNull(tickController, "tickController");
-            return this;
-        }
-
-        public Builder runner(BatchedSimulationRunner runner) {
-            this.runner = Objects.requireNonNull(runner, "runner");
-            return this;
-        }
-
-        public Builder registry(SimulationRegistry registry) {
-            this.registry = Objects.requireNonNull(registry, "registry");
-            return this;
-        }
-
-        public Builder broadcaster(Broadcaster broadcaster) {
-            this.broadcaster = Objects.requireNonNull(broadcaster, "broadcaster");
-            return this;
-        }
-
-        public Builder simulationIdFactory(SimulationIdFactory simulationIdFactory) {
-            this.simulationIdFactory = Objects.requireNonNull(simulationIdFactory, "simulationIdFactory");
-            return this;
-        }
-
-        public ServerApplication build() {
-            if (ticker == null) {
-                ticker = new Ticker();
-            }
-
-            if (tickController == null) {
-                tickController = ServerTickController.automatic();
-            }
-
-            if (runner == null) {
-                runner = new BatchedSimulationRunner(2, "server");
-            }
-
-            if (registry == null) {
-                registry = new SimulationRegistry();
-            }
-
-            if (broadcaster == null && transport != null) {
-                broadcaster = new Broadcaster(transport);
-            }
-
-            if (simulationIdFactory == null) {
-                simulationIdFactory = new SimulationIdFactory();
-            }
-
-            return new ServerApplication(this);
         }
     }
 }
