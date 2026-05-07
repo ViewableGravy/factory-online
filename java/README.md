@@ -48,6 +48,8 @@ In another terminal:
 ./run-client.sh
 ```
 
+The client currently prompts for username and password in the terminal, then opens a blank LWJGL window. Close the window or press `Escape` to exit the headed client.
+
 Pass `-v` to show the underlying build and run commands before the application starts.
 
 Or explicitly:

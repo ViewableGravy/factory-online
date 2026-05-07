@@ -6,8 +6,8 @@ import java.util.concurrent.locks.LockSupport;
 import com.factoryonline.client.bootstrap.App;
 import com.factoryonline.client.bootstrap.ClientApplication;
 import com.factoryonline.client.bootstrap.ClientRuntimeLoop;
+import com.factoryonline.client.render.LwjglRenderHost;
 import com.factoryonline.foundation.config.NetworkConfig;
-import com.factoryonline.foundation.config.TerminalCommands;
 import com.factoryonline.foundation.scheduler.LoopCadence;
 import com.factoryonline.foundation.terminal.TerminalCommandHandler;
 import com.factoryonline.server.bootstrap.TerminalUiState;
@@ -30,28 +30,31 @@ public final class Main {
         ClientApplication app = App.singleton();
         ClientRuntimeLoop runtimeLoop = new ClientRuntimeLoop(app, transport);
 
-        /***** INITIALIZE *****/
-        Scheduler.register(app::applyQueuedActions);
-        Scheduler.register(app::runAttachedSimulations);
-        Scheduler.register(app::compareQueuedChecksum);
+        try {
+            /***** INITIALIZE *****/
+            Scheduler.register(app::applyQueuedActions);
+            Scheduler.register(app::runAttachedSimulations);
+            Scheduler.register(app::compareQueuedChecksum);
 
-        transport.initialize(App.clientId);
-        app.initialize(transport);
+            transport.initialize(App.clientId);
+            app.initialize(transport);
 
-        /***** START *****/
-        transport.start();
+            /***** START *****/
+            transport.start();
 
-        authenticate(transport);
+            authenticate(transport);
+            runtimeLoop.start();
 
-        runtimeLoop.start();
+            printConnectedMessage();
 
-        printConnectedMessage();
-
-        TerminalCommandHandler.awaitClientCommands(prompt(), runtimeLoop::submitInput);
-        
-        /***** CLEANUP *****/
-        runtimeLoop.stop();
-        app.cleanup();
+            LwjglRenderHost.initializeSingleton().runUntilClosed();
+        } finally {
+            /***** CLEANUP *****/
+            runtimeLoop.stop();
+            app.cleanup();
+            LwjglRenderHost.shutdownSingleton();
+            closeTransport(transport);
+        }
     }
 
     private static void authenticate(TcpClientTransport transport) throws IOException {
@@ -84,22 +87,16 @@ public final class Main {
         }
     }
 
-    private static String prompt() {
-        return "Client ["
-            + TerminalUiState.getInstance().formatClient(App.singleton().clientId)
-            + "] "
-            + TerminalCommands.SNAPSHOT_COMMAND
-            + ", "
-            + TerminalCommands.INCREMENT_COMMAND
-            + "/"
-            + TerminalCommands.DECREMENT_COMMAND
-            + "=apply, "
-            + TerminalCommands.EXIT_COMMAND
-            + "=quit: ";
-    }
-
     private static void printConnectedMessage() {
         System.out.println(
             "Client " + TerminalUiState.getInstance().formatClient(App.singleton().clientId) + " connected");
+    }
+
+    private static void closeTransport(TcpClientTransport transport) {
+        try {
+            transport.close();
+        } catch (IOException exception) {
+            System.err.println("Client transport close failed: " + exception.getMessage());
+        }
     }
 }

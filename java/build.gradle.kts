@@ -8,6 +8,13 @@ plugins {
     application
 }
 
+val lwjglVersion = "3.4.1"
+val lwjglNatives = when {
+    System.getProperty("os.name").lowercase().contains("win") -> "natives-windows"
+    System.getProperty("os.name").lowercase().contains("mac") -> "natives-macos"
+    else -> "natives-linux"
+}
+
 repositories {
     mavenCentral()
 }
@@ -16,6 +23,13 @@ dependencies {
     implementation("org.jline:jline:4.0.12:jdk11")
     implementation("org.jline:jline-terminal-jni:4.0.12")
     implementation("com.esotericsoftware:kryo:5.6.2")
+    implementation("org.lwjgl:lwjgl:$lwjglVersion")
+    implementation("org.lwjgl:lwjgl-glfw:$lwjglVersion")
+    implementation("org.lwjgl:lwjgl-opengl:$lwjglVersion")
+
+    runtimeOnly("org.lwjgl:lwjgl:$lwjglVersion:$lwjglNatives")
+    runtimeOnly("org.lwjgl:lwjgl-glfw:$lwjglVersion:$lwjglNatives")
+    runtimeOnly("org.lwjgl:lwjgl-opengl:$lwjglVersion:$lwjglNatives")
 }
 
 java {
